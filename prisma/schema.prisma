@@ -1,0 +1,222 @@
+// FieldSignal — Database Schema
+// Solar Plant O&M Voice-First Maintenance Intelligence Platform
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  FIELD_TECH
+  SITE_SUPERVISOR
+  PLANT_MANAGER
+}
+
+enum AssetType {
+  CENTRAL_INVERTER
+  STRING_INVERTER
+  TRANSFORMER
+  SMB_SCB              // String Monitoring Box / Combiner Box
+  TRACKER_CONTROLLER
+  TRACKER_MOTOR
+  MODULE_STRING
+  HT_PANEL_BREAKER
+  WEATHER_STATION_WMS
+  AUXILIARY_SYSTEM
+}
+
+enum AssetStatus {
+  OPERATIONAL
+  DEGRADED
+  FAULTED
+  UNDER_MAINTENANCE
+  DECOMMISSIONED
+}
+
+enum IncidentStatus {
+  DRAFT
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  REJECTED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FaultCategory {
+  OVER_TEMPERATURE
+  INSULATION_RESISTANCE
+  EARTH_FAULT
+  GRID_TRIP_ABNORMAL_VOLTAGE
+  COMMUNICATION_LOSS_SCADA
+  TRACKER_STUCK_MECHANICAL
+  DC_ARC_OR_BURN
+  STRING_UNDERPERFORMANCE
+  FUSE_BLOWN
+  SENSOR_DEFECT
+  OTHER
+}
+
+model Plant {
+  id           String      @id @default(uuid())
+  code         String      @unique // e.g., "PLANT-RAJ-01"
+  name         String      // e.g., "Bhadla Solar Park Block IV"
+  capacityMw   Decimal     @db.Decimal(8, 2)
+  state        String      // e.g., "Rajasthan"
+  country      String      @default("India")
+  timezone     String      @default("Asia/Kolkata")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  users        User[]
+  assets       Asset[]
+  incidents    Incident[]
+
+  @@map("plants")
+}
+
+model User {
+  id           String      @id @default(uuid())
+  plantId      String
+  name         String
+  phone        String      @unique
+  email        String?     @unique
+  passwordHash String
+  role         UserRole    @default(FIELD_TECH)
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  plant             Plant              @relation(fields: [plantId], references: [id], onDelete: Restrict)
+  reportedIncidents Incident[]         @relation("ReportedBy")
+  assignedIncidents Incident[]         @relation("AssignedTo")
+  audioRecords      AudioRecord[]
+  auditLogs         IncidentAuditLog[]
+
+  @@index([plantId, role])
+  @@map("users")
+}
+
+model Asset {
+  id              String       @id @default(uuid())
+  plantId         String
+  parentAssetId   String?
+  assetTag        String       // e.g. "INV-04", "SMB-02-B", "TR-01"
+  name            String       // e.g. "Central Inverter 4 (SMA 2.5MW)"
+  assetType       AssetType
+  blockIdentifier String       // e.g. "Block-02", "Inverter Station 04"
+  status          AssetStatus  @default(OPERATIONAL)
+  manufacturer    String?
+  model           String?
+  serialNumber    String?
+  commissionDate  DateTime?
+  metadata        Json?        // Technical specs, rated DC voltage, string count
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  plant           Plant        @relation(fields: [plantId], references: [id], onDelete: Restrict)
+  parentAsset     Asset?       @relation("AssetHierarchy", fields: [parentAssetId], references: [id])
+  childAssets     Asset[]      @relation("AssetHierarchy")
+  incidents       Incident[]
+
+  @@unique([plantId, assetTag, blockIdentifier])
+  @@index([plantId, assetType])
+  @@index([assetTag])
+  @@map("assets")
+}
+
+model AudioRecord {
+  id               String       @id @default(uuid())
+  plantId          String
+  userId           String
+  filePath         String       // Relative storage path: "/uploads/audio/2026/11/abc.webm"
+  fileSizeBytes    Int
+  mimeType         String       @default("audio/webm")
+  durationSeconds  Float
+  rawTranscript    String?      @db.Text
+  detectedLanguage String?      // "hi-IN", "en-IN", "hinglish"
+  gnaniConfidence  Float?
+  gnaniLatencyMs   Int?
+  llmLatencyMs     Int?
+  createdAt        DateTime     @default(now())
+
+  user             User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  incident         Incident?
+
+  @@index([userId, createdAt])
+  @@map("audio_records")
+}
+
+model Incident {
+  id                   String          @id @default(uuid())
+  ticketNumber         String          @unique // e.g. "FS-2026-00421"
+  plantId              String
+  assetId              String?
+  reportedByUserId     String
+  assignedToUserId     String?
+  audioRecordId        String?         @unique
+
+  status               IncidentStatus  @default(OPEN)
+  priority             Priority        @default(MEDIUM)
+  faultCategory        FaultCategory   @default(OTHER)
+  errorCode            String?         // e.g. "E-23", "F-042", "ERR_INSUL"
+  
+  title                String          // Short AI or user summarized title
+  description          String          @db.Text // Full detail description
+  symptoms             String?         @db.Text // Observed symptoms
+  immediateActionTaken String?         @db.Text // e.g. "DC Breaker trip kiya gaya"
+  
+  // Intelligence & Validation Data
+  missingFields        Json?           // e.g. ["error_code", "inverter_block"]
+  isRepeatFault        Boolean         @default(false)
+  repeatCount30d       Int             @default(0)
+  
+  confirmedAt          DateTime?
+  resolvedAt           DateTime?
+  closedAt             DateTime?
+  resolutionNotes      String?         @db.Text
+
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  plant                Plant              @relation(fields: [plantId], references: [id], onDelete: Restrict)
+  asset                Asset?             @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  reportedBy           User               @relation("ReportedBy", fields: [reportedByUserId], references: [id], onDelete: Restrict)
+  assignedTo           User?              @relation("AssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  audioRecord          AudioRecord?       @relation(fields: [audioRecordId], references: [id], onDelete: SetNull)
+  auditLogs            IncidentAuditLog[]
+
+  @@index([plantId, status])
+  @@index([assetId, createdAt])
+  @@index([priority, status])
+  @@map("incidents")
+}
+
+model IncidentAuditLog {
+  id           String          @id @default(uuid())
+  incidentId   String
+  userId       String
+  action       String          // "STATUS_CHANGE", "ASSIGNMENT", "FIELD_EDIT", "CONFIRM"
+  fromStatus   IncidentStatus?
+  toStatus     IncidentStatus?
+  payloadDiff  Json?           // JSON patch of changed fields
+  note         String?
+  createdAt    DateTime        @default(now())
+
+  incident     Incident        @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([incidentId, createdAt])
+  @@map("incident_audit_logs")
+}

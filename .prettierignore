@@ -1,0 +1,10 @@
+.agents
+docs
+.next
+node_modules
+dist
+build
+coverage
+package-lock.json
+*.tsbuildinfo
+next-env.d.ts
