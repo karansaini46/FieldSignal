@@ -7,15 +7,15 @@ export interface AssetSummary {
   assetTag: string;
   name: string;
   assetType: AssetType;
-  blockIdentifier: string;
+  block: string;
   status: AssetStatus;
-  plantId: string;
+  siteId: string;
 }
 
 export interface AssetSearchQuery {
-  plantId: string;
+  siteId: string;
   searchTerm?: string;
   assetType?: AssetType;
-  blockIdentifier?: string;
+  block?: string;
   limit?: number;
 }

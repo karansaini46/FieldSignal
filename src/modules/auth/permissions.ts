@@ -5,7 +5,8 @@ export interface AuthSession {
   name: string;
   phone: string;
   role: UserRole;
-  plantId: string;
+  organizationId: string;
+  siteId?: string | null;
 }
 
 export type PermissionAction =

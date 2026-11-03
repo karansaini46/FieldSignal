@@ -1,6 +1,6 @@
-import { Incident, IncidentStatus, Priority, FaultCategory } from "@prisma/client";
+import { Incident, IncidentStatus, IncidentPriority, FaultCategory } from "@prisma/client";
 
-export type { Incident, IncidentStatus, Priority, FaultCategory };
+export type { Incident, IncidentStatus, IncidentPriority, FaultCategory };
 
 export interface DraftIncident {
   draftId: string;
@@ -11,7 +11,7 @@ export interface DraftIncident {
     blockIdentifier: string | null;
     faultCategory: FaultCategory;
     errorCode: string | null;
-    severity: Priority;
+    severity: IncidentPriority;
     title: string;
     description: string;
     symptoms: string | null;
@@ -31,9 +31,9 @@ export interface DraftIncident {
 }
 
 export interface IncidentFilterOptions {
-  plantId: string;
+  siteId: string;
   status?: IncidentStatus;
-  priority?: Priority;
+  priority?: IncidentPriority;
   assetId?: string;
   block?: string;
   assignedToUserId?: string;

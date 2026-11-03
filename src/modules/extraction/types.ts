@@ -1,4 +1,4 @@
-import { FaultCategory, Priority } from "@prisma/client";
+import { FaultCategory, IncidentPriority } from "@prisma/client";
 
 /**
  * AI Incident Extraction schema contracts.
@@ -8,7 +8,7 @@ export interface ExtractedIncidentData {
   blockIdentifier: string | null;
   faultCategory: FaultCategory;
   errorCode: string | null;
-  severity: Priority;
+  severity: IncidentPriority;
   title: string;
   description: string;
   symptoms: string | null;
