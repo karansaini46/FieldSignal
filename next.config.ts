@@ -3,8 +3,6 @@ import path from "path";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
   turbopack: {
     root: path.resolve(process.cwd()),
     rules: {

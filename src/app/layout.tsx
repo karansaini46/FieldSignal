@@ -1,3 +1,4 @@
+import React from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -35,7 +36,24 @@ export default function RootLayout({
           geistMono.variable
         )}
       >
-        <Header />
+        <React.Suspense
+          fallback={
+            <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur">
+              <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-8">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 ring-1 ring-amber-500/20">
+                    <span className="font-bold">FS</span>
+                  </div>
+                  <div>
+                    <span className="font-bold tracking-tight text-foreground">FieldSignal</span>
+                  </div>
+                </div>
+              </div>
+            </header>
+          }
+        >
+          <Header />
+        </React.Suspense>
         <main className="flex-1">{children}</main>
         <Footer />
       </body>

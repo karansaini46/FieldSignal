@@ -15,9 +15,9 @@ generator client {
 // -----------------------------------------------------------------------------
 
 enum UserRole {
-  FIELD_TECH
-  SITE_SUPERVISOR
-  PLANT_MANAGER
+  ADMIN
+  SUPERVISOR
+  TECHNICIAN
 }
 
 enum SiteStatus {
@@ -123,7 +123,7 @@ model User {
   phone          String    @unique
   email          String?   @unique
   passwordHash   String
-  role           UserRole  @default(FIELD_TECH)
+  role           UserRole  @default(TECHNICIAN)
   isActive       Boolean   @default(true)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

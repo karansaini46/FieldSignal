@@ -10,6 +10,7 @@ import {
   IncidentEventType,
   ClarificationStatus,
 } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -72,8 +73,8 @@ async function main() {
   // ---------------------------------------------------------------------------
   // 4. Users (Technicians, Site Supervisors, Plant Managers)
   // ---------------------------------------------------------------------------
-  // Default password hash placeholder (bcrypt compatible)
-  const passwordHash = "$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6x8ecGy5P5ZZMb3vq4u.";
+  // Default secure password hash for seeded accounts ("password123")
+  const passwordHash = bcrypt.hashSync("password123", 10);
 
   await prisma.user.create({
     data: {
@@ -81,7 +82,7 @@ async function main() {
       name: "Pooja Sharma",
       phone: "+919876500000",
       email: "pooja.sharma@sunrisesolar.com",
-      role: UserRole.PLANT_MANAGER,
+      role: UserRole.ADMIN,
       passwordHash,
     },
   });
@@ -93,7 +94,7 @@ async function main() {
       name: "Vikramaditya Rathore",
       phone: "+919876500001",
       email: "vikram.rathore@sunrisesolar.com",
-      role: UserRole.SITE_SUPERVISOR,
+      role: UserRole.SUPERVISOR,
       passwordHash,
     },
   });
@@ -105,7 +106,7 @@ async function main() {
       name: "Rajesh Meena",
       phone: "+919876500002",
       email: "rajesh.meena@sunrisesolar.com",
-      role: UserRole.FIELD_TECH,
+      role: UserRole.TECHNICIAN,
       passwordHash,
     },
   });
@@ -117,7 +118,7 @@ async function main() {
       name: "Suresh Gurjar",
       phone: "+919876500003",
       email: "suresh.gurjar@sunrisesolar.com",
-      role: UserRole.FIELD_TECH,
+      role: UserRole.TECHNICIAN,
       passwordHash,
     },
   });
@@ -129,7 +130,7 @@ async function main() {
       name: "Anand Gowda",
       phone: "+919876500004",
       email: "anand.gowda@sunrisesolar.com",
-      role: UserRole.SITE_SUPERVISOR,
+      role: UserRole.SUPERVISOR,
       passwordHash,
     },
   });
@@ -141,7 +142,7 @@ async function main() {
       name: "Praveen Kumar",
       phone: "+919876500005",
       email: "praveen.kumar@sunrisesolar.com",
-      role: UserRole.FIELD_TECH,
+      role: UserRole.TECHNICIAN,
       passwordHash,
     },
   });
@@ -532,8 +533,64 @@ async function main() {
     ],
   });
 
+  // ---------------------------------------------------------------------------
+  // 8. Secondary Organization: Apex Clean Energy (For multi-tenant isolation testing)
+  // ---------------------------------------------------------------------------
+  const orgApex = await prisma.organization.create({
+    data: {
+      name: "Apex Clean Energy",
+      code: "APEX-SOLAR",
+    },
+  });
+
+  const siteApex = await prisma.site.create({
+    data: {
+      organizationId: orgApex.id,
+      name: "Rewa Ultra Mega Solar - Unit 1",
+      code: "APEX-REW-01",
+      capacityMw: 25.0,
+      location: "Rewa District, Madhya Pradesh, India",
+    },
+  });
+
+  const userApexTech = await prisma.user.create({
+    data: {
+      organizationId: orgApex.id,
+      siteId: siteApex.id,
+      name: "Amit Patel",
+      phone: "+919876599999",
+      email: "amit.patel@apexcleanenergy.com",
+      role: UserRole.TECHNICIAN,
+      passwordHash,
+    },
+  });
+
+  const assetApex = await prisma.asset.create({
+    data: {
+      siteId: siteApex.id,
+      assetTag: "INV-APEX-01",
+      name: "Central Inverter Rewa 01",
+      assetType: AssetType.CENTRAL_INVERTER,
+      block: "Block-Rewa-1",
+    },
+  });
+
+  await prisma.incident.create({
+    data: {
+      ticketNumber: "INC-APEX-0001",
+      siteId: siteApex.id,
+      assetId: assetApex.id,
+      reportedByUserId: userApexTech.id,
+      status: IncidentStatus.OPEN,
+      priority: IncidentPriority.MEDIUM,
+      faultCategory: FaultCategory.FUSE_BLOWN,
+      title: "Apex Solar Fuse Blown In Rewa Unit 1",
+      description: "Blown DC string fuse detected during routine inspection.",
+    },
+  });
+
   console.log(
-    `✅ Created 3 realistic Incidents with full Audit Events, Clarification & Audio linkages`
+    `✅ Created 3 realistic Incidents for Sunrise Solar + 1 isolated Incident for Apex Energy`
   );
   console.log("🌟 Seed completed successfully with zero fake production metrics!");
 }

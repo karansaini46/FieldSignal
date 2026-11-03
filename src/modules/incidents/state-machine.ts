@@ -15,49 +15,49 @@ export const INCIDENT_TRANSITIONS: StateTransitionRule[] = [
   {
     from: "DRAFT",
     to: "OPEN",
-    allowedRoles: ["FIELD_TECH", "SITE_SUPERVISOR", "PLANT_MANAGER"],
+    allowedRoles: ["TECHNICIAN", "SUPERVISOR", "ADMIN"],
     description: "Technician or supervisor confirms draft and logs incident ticket",
   },
   {
     from: "OPEN",
     to: "ASSIGNED",
-    allowedRoles: ["SITE_SUPERVISOR", "PLANT_MANAGER"],
+    allowedRoles: ["SUPERVISOR", "ADMIN"],
     description: "Supervisor assigns incident to a maintenance technician",
   },
   {
     from: "OPEN",
     to: "REJECTED",
-    allowedRoles: ["SITE_SUPERVISOR", "PLANT_MANAGER"],
+    allowedRoles: ["SUPERVISOR", "ADMIN"],
     description: "Supervisor rejects false alarm or duplicate ticket",
   },
   {
     from: "ASSIGNED",
     to: "IN_PROGRESS",
-    allowedRoles: ["FIELD_TECH", "SITE_SUPERVISOR", "PLANT_MANAGER"],
+    allowedRoles: ["TECHNICIAN", "SUPERVISOR", "ADMIN"],
     description: "Assigned technician begins on-site inspection or repair",
   },
   {
     from: "ASSIGNED",
     to: "REJECTED",
-    allowedRoles: ["SITE_SUPERVISOR", "PLANT_MANAGER"],
+    allowedRoles: ["SUPERVISOR", "ADMIN"],
     description: "Supervisor cancels assignment and rejects ticket",
   },
   {
     from: "IN_PROGRESS",
     to: "RESOLVED",
-    allowedRoles: ["FIELD_TECH", "SITE_SUPERVISOR", "PLANT_MANAGER"],
+    allowedRoles: ["TECHNICIAN", "SUPERVISOR", "ADMIN"],
     description: "Technician completes physical repair and logs resolution notes",
   },
   {
     from: "RESOLVED",
     to: "CLOSED",
-    allowedRoles: ["SITE_SUPERVISOR", "PLANT_MANAGER"],
+    allowedRoles: ["SUPERVISOR", "ADMIN"],
     description: "Supervisor verifies SCADA generation is restored and closes ticket",
   },
   {
     from: "RESOLVED",
     to: "IN_PROGRESS",
-    allowedRoles: ["SITE_SUPERVISOR", "PLANT_MANAGER"],
+    allowedRoles: ["SUPERVISOR", "ADMIN"],
     description: "Supervisor finds fault persisting and reopens ticket",
   },
 ];
@@ -82,7 +82,7 @@ export function validateIncidentTransition(
 
   if (!rule.allowedRoles.includes(userRole)) {
     throw new AppError(
-      `Role ${userRole} is not authorized to transition incident from ${fromStatus} to ${toStatus}.`,
+      `Role ${userRole} is not authorized to transition incident from ${fromStatus} to ${toStatus}. Only ${rule.allowedRoles.join(", ")} may execute this change.`,
       403,
       "FORBIDDEN"
     );
