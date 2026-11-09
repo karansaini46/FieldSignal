@@ -45,12 +45,12 @@ enum AssetStatus {
 
 enum IncidentStatus {
   DRAFT
-  OPEN
-  ASSIGNED
+  NEEDS_CLARIFICATION
+  SUBMITTED
+  ACKNOWLEDGED
   IN_PROGRESS
   RESOLVED
   CLOSED
-  REJECTED
 }
 
 enum IncidentPriority {
@@ -203,7 +203,7 @@ model Incident {
   assignedToUserId   String?
   audioRecordingId   String?          @unique // Optional: audio recordings are not required for every incident
 
-  status             IncidentStatus   @default(OPEN)
+  status             IncidentStatus   @default(SUBMITTED)
   priority           IncidentPriority @default(MEDIUM)
   faultCategory      FaultCategory    @default(OTHER)
   title              String

@@ -17,6 +17,7 @@ const updateIncidentSchema = z.object({
   assignedToUserId: z.string().uuid().optional().nullable(),
   priority: z.nativeEnum(IncidentPriority).optional(),
   resolutionNotes: z.string().optional().nullable(),
+  title: z.string().min(3).optional(),
   description: z.string().optional(),
   symptoms: z.string().optional().nullable(),
   errorCode: z.string().optional().nullable(),
@@ -28,6 +29,7 @@ interface RouteParams {
 
 /**
  * GET /api/v1/incidents/:id
+ * Retrieves full incident details, site, asset, reporter/assignee, clarifications, and timeline audit events.
  */
 export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
@@ -37,8 +39,21 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const incident = await db.incident.findUnique({
       where: { id },
       include: {
-        site: { select: { id: true, name: true, code: true, organizationId: true } },
-        asset: true,
+        site: { select: { id: true, name: true, code: true, organizationId: true, location: true } },
+        asset: {
+          select: {
+            id: true,
+            assetTag: true,
+            name: true,
+            assetType: true,
+            block: true,
+            row: true,
+            status: true,
+            manufacturer: true,
+            model: true,
+            ratedCapacityKw: true,
+          },
+        },
         reportedBy: { select: { id: true, name: true, phone: true, role: true } },
         assignedTo: { select: { id: true, name: true, phone: true, role: true } },
         events: {
@@ -47,8 +62,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         },
         clarifications: {
           include: {
-            requestedBy: { select: { id: true, name: true } },
-            respondedBy: { select: { id: true, name: true } },
+            requestedBy: { select: { id: true, name: true, role: true } },
+            respondedBy: { select: { id: true, name: true, role: true } },
           },
           orderBy: { createdAt: "desc" },
         },
@@ -72,11 +87,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
 /**
  * PATCH /api/v1/incidents/:id
- * Server-side authorization checks:
- * 1. Multi-tenant isolation (user cannot modify another org's incident)
- * 2. Site isolation (technician cannot modify another site's incident)
- * 3. Technician field protection (cannot reassign, change priority, or close tickets)
- * 4. State transition rules (must be permitted in finite state machine)
+ * Modifies an incident ticket with strict server-side validation and audit event creation.
  */
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
   try {
@@ -102,10 +113,10 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     // 2. Site-level Access Check
     assertSiteAccess(existingIncident.siteId, session);
 
-    // 3. Technician Mutation Field Protection (Prevents technician tampering with supervisor fields)
+    // 3. Technician Mutation Field Protection (cannot reassign, change priority, or close tickets)
     assertTechnicianMutationAllowed(body, session);
 
-    // 4. Status Transition Validation
+    // 4. Status Transition Validation & Audit Event Planning
     let eventType: IncidentEventType = "FIELD_UPDATE";
     let eventTitle = "Incident Details Updated";
     let eventDescription = `Updated by ${session.name} (${session.role}).`;
@@ -114,18 +125,29 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       validateIncidentTransition(existingIncident.status, data.status, session.role);
       eventType = "STATUS_CHANGE";
       eventTitle = `Status Changed: ${existingIncident.status} → ${data.status}`;
-      eventDescription = data.resolutionNotes ?? `Status updated to ${data.status}.`;
+      eventDescription =
+        data.resolutionNotes ?? `Status updated from ${existingIncident.status} to ${data.status} by ${session.name}.`;
     } else if (
-      data.assignedToUserId &&
+      data.assignedToUserId !== undefined &&
       data.assignedToUserId !== existingIncident.assignedToUserId
     ) {
       eventType = "ASSIGNMENT";
-      eventTitle = "Ticket Assigned";
-      eventDescription = `Assigned to user ID ${data.assignedToUserId} by ${session.name}.`;
+      eventTitle = data.assignedToUserId ? "Ticket Assigned" : "Ticket Unassigned";
+      eventDescription = data.assignedToUserId
+        ? `Assigned to user ID ${data.assignedToUserId} by ${session.name} (${session.role}).`
+        : `Unassigned by ${session.name}.`;
+    } else if (data.priority && data.priority !== existingIncident.priority) {
+      eventType = "FIELD_UPDATE";
+      eventTitle = `Priority Changed: ${existingIncident.priority} → ${data.priority}`;
+      eventDescription = `Priority updated to ${data.priority} by ${session.name} (${session.role}).`;
     }
 
     // Prepare update payload
     const updatePayload: Prisma.IncidentUpdateInput = { ...data };
+
+    if (data.status === IncidentStatus.SUBMITTED && !existingIncident.confirmedAt) {
+      updatePayload.confirmedAt = new Date();
+    }
     if (data.status === IncidentStatus.RESOLVED && !existingIncident.resolvedAt) {
       updatePayload.resolvedAt = new Date();
     }
@@ -141,6 +163,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         include: {
           site: { select: { id: true, name: true, code: true } },
           asset: { select: { id: true, assetTag: true, name: true } },
+          reportedBy: { select: { id: true, name: true, role: true } },
           assignedTo: { select: { id: true, name: true, role: true } },
         },
       });

@@ -133,12 +133,12 @@ export function assertTechnicianMutationAllowed(
     );
   }
 
-  // Prevent technician from directly setting status to CLOSED or REJECTED
+  // Prevent technician from directly setting status to CLOSED
   if ("status" in mutationPayload) {
     const targetStatus = mutationPayload.status as string;
-    if (targetStatus === "CLOSED" || targetStatus === "REJECTED") {
+    if (targetStatus === "CLOSED") {
       throw new ForbiddenError(
-        `Technicians cannot directly close or reject incidents. Only supervisors can verify and close incidents.`
+        `Technicians cannot directly close incidents. Only supervisors can verify and close incidents.`
       );
     }
   }

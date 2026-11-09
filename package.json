@@ -15,7 +15,8 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "prisma db seed",
-    "test:auth": "tsx scripts/test-auth-rbac.ts"
+    "test:auth": "tsx scripts/test-auth-rbac.ts",
+    "test:validation": "tsx scripts/test-asset-incident-validation.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

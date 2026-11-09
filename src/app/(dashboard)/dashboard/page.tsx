@@ -34,7 +34,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     const assignedIncidents = await db.incident.findMany({
       where: {
         assignedToUserId: session.userId,
-        status: { in: ["ASSIGNED", "IN_PROGRESS", "OPEN"] },
+        status: { in: ["ACKNOWLEDGED", "IN_PROGRESS", "SUBMITTED"] },
       },
       include: {
         asset: { select: { assetTag: true, block: true } },
@@ -83,7 +83,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   if (session.role === "SUPERVISOR") {
     const [openCount, inProgressCount, criticalCount, totalAssets, faultedAssets, recentIncidents] =
       await Promise.all([
-        db.incident.count({ where: { ...whereIncident, status: "OPEN" } }),
+        db.incident.count({ where: { ...whereIncident, status: "SUBMITTED" } }),
         db.incident.count({ where: { ...whereIncident, status: "IN_PROGRESS" } }),
         db.incident.count({ where: { ...whereIncident, priority: "CRITICAL" } }),
         db.asset.count({ where: whereAsset }),
@@ -137,7 +137,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           select: {
             assets: true,
             incidents: {
-              where: { status: { notIn: ["RESOLVED", "CLOSED", "REJECTED"] } },
+              where: { status: { notIn: ["RESOLVED", "CLOSED"] } },
             },
           },
         },

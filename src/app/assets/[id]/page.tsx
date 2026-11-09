@@ -134,12 +134,12 @@ export default async function AssetDetailPage({ params }: AssetDetailPageProps) 
 
   const incidentStatusStyles: Record<string, string> = {
     DRAFT: "bg-neutral-100 text-neutral-600 border-neutral-200",
-    OPEN: "bg-amber-50 text-amber-800 border-amber-200",
-    ASSIGNED: "bg-blue-50 text-blue-800 border-blue-200",
+    NEEDS_CLARIFICATION: "bg-purple-50 text-purple-800 border-purple-200",
+    SUBMITTED: "bg-amber-50 text-amber-800 border-amber-200",
+    ACKNOWLEDGED: "bg-blue-50 text-blue-800 border-blue-200",
     IN_PROGRESS: "bg-indigo-50 text-indigo-800 border-indigo-200",
     RESOLVED: "bg-emerald-50 text-emerald-800 border-emerald-200",
     CLOSED: "bg-neutral-50 text-neutral-700 border-neutral-200",
-    REJECTED: "bg-rose-50 text-rose-800 border-rose-200",
   };
 
   const equipmentTypeDisplay: Record<AssetType, string> = {
@@ -157,7 +157,7 @@ export default async function AssetDetailPage({ params }: AssetDetailPageProps) 
     bg: "bg-emerald-500/10 text-emerald-700",
   };
   const activeFaults = asset.incidents.filter((i) =>
-    ["OPEN", "ASSIGNED", "IN_PROGRESS"].includes(i.status)
+    ["NEEDS_CLARIFICATION", "SUBMITTED", "ACKNOWLEDGED", "IN_PROGRESS"].includes(i.status)
   );
   const resolvedFaults = asset.incidents.filter((i) =>
     ["RESOLVED", "CLOSED"].includes(i.status)

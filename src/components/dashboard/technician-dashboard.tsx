@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import Link from "next/link";
 import {
   Mic,
-  MicOff,
   Radio,
   Clock,
   MapPin,
@@ -20,8 +19,11 @@ import {
   Layers,
   FileText,
   AlertCircle,
+  Loader2,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AudioRecorder, RecordedAudioData } from "@/modules/speech";
 
 interface IncidentItem {
   id: string;
@@ -48,14 +50,29 @@ interface TechnicianDashboardProps {
   assignedIncidents: IncidentItem[];
 }
 
+interface TranscribedVoiceData {
+  recordingId: string;
+  transcript: string;
+  isEmptyTranscript: boolean;
+  detectedLanguage: string;
+  confidence: number;
+  processingTimeSeconds?: number;
+  latencyMs: number;
+  model: string;
+  isDuplicate?: boolean;
+}
+
 export function TechnicianDashboard({
   technicianName,
   siteName,
   siteCode,
   assignedIncidents,
 }: TechnicianDashboardProps) {
-  const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState<string | null>(null);
+  const [transcriptionResult, setTranscriptionResult] = useState<TranscribedVoiceData | null>(null);
+  const [extractedIncident, setExtractedIncident] = useState<any | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
+
   const [checklist, setChecklist] = useState({
     loto: true,
     ppe: true,
@@ -63,19 +80,62 @@ export function TechnicianDashboard({
     permit: true,
   });
 
-  function handleRecordToggle() {
-    if (!isRecording) {
-      setIsRecording(true);
-      setTranscript(null);
-      // ponytail: Simulated field voice recording state for technician interface testing
-      setTimeout(() => {
-        setIsRecording(false);
-        setTranscript(
-          "BHA-INV-01 mein IGBT over-temperature alarm aaya hai. Error code E-402 show ho raha hai, inverter trip kar gaya hai."
-        );
-      }, 3500);
-    } else {
-      setIsRecording(false);
+  async function handleAudioSubmit(data: RecordedAudioData) {
+    if (isTranscribing) return; // Prevent duplicate submissions
+
+    setIsTranscribing(true);
+    setTranscriptionError(null);
+    setTranscriptionResult(null);
+    setExtractedIncident(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("audio_file", data.blob, data.fileName);
+
+      const response = await fetch("/api/v1/speech/transcribe", {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = await response.json();
+
+      if (!response.ok || !json.success) {
+        throw new Error(json.error?.message || "Failed to transcribe voice note");
+      }
+
+      const transcription = json.data;
+      setTranscriptionResult({
+        recordingId: transcription.recordingId,
+        transcript: transcription.transcript,
+        isEmptyTranscript: transcription.isEmptyTranscript || !transcription.transcript?.trim(),
+        detectedLanguage: transcription.detectedLanguage,
+        confidence: transcription.confidence,
+        processingTimeSeconds: transcription.processingTimeSeconds,
+        latencyMs: transcription.latencyMs,
+        model: transcription.model,
+        isDuplicate: transcription.isDuplicate,
+      });
+
+      // Run extraction on non-empty transcript
+      if (transcription.transcript?.trim()) {
+        try {
+          const extractRes = await fetch("/api/v1/incidents/extract", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transcript: transcription.transcript }),
+          });
+          const extractJson = await extractRes.json();
+          if (extractJson.success && extractJson.data) {
+            setExtractedIncident(extractJson.data);
+          }
+        } catch (exErr) {
+          console.warn("Background extraction skipped:", exErr);
+        }
+      }
+    } catch (err: unknown) {
+      setTranscriptionError(err instanceof Error ? err.message : "Error processing voice note");
+    } finally {
+      setIsTranscribing(false);
     }
   }
 
@@ -139,65 +199,193 @@ export function TechnicianDashboard({
         </div>
       </div>
 
-      {/* 2. Primary Voice Incident Capture Console (Large Rugged Button) */}
-      <section className="rounded-lg border border-neutral-200 bg-white p-5 sm:p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="space-y-1.5 text-center sm:text-left max-w-md">
+      {/* 2. Primary Voice Incident Capture Console (Browser Audio Recorder) */}
+      <section className="rounded-lg border border-neutral-200 bg-white p-5 sm:p-6 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-neutral-100">
+          <div className="space-y-1">
             <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-amber-50 text-amber-800 border border-amber-200">
               <Radio className="h-3 w-3 text-amber-600" />
-              Voice-First Incident Engine
+              <span>Voice-First Incident Engine</span>
             </div>
             <h2 className="text-base sm:text-lg font-bold text-neutral-900">
-              Report Equipment Fault via Voice
+              Report Equipment Fault via Voice Note
             </h2>
             <p className="text-xs text-neutral-600 leading-relaxed">
-              Speak in Hindi, Hinglish, or English. Include the asset tag (e.g.{" "}
+              Record spoken observations in Hindi, Hinglish, or English. Speak asset tag (e.g.{" "}
               <code className="font-mono bg-neutral-100 px-1 py-0.2 rounded text-neutral-800">
                 BHA-INV-01
               </code>
-              ) and inverter error code.
+              ) and inverter fault code.
             </p>
           </div>
-
-          <div className="flex flex-col items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={handleRecordToggle}
-              className={cn(
-                "relative flex h-18 w-18 items-center justify-center rounded-full transition-all focus:outline-none focus:ring-4 select-none",
-                isRecording
-                  ? "bg-rose-600 text-white ring-rose-200 shadow-lg scale-105"
-                  : "bg-amber-600 text-white hover:bg-amber-500 active:scale-95 shadow-md shadow-amber-600/20 ring-amber-200"
-              )}
-            >
-              {isRecording ? <MicOff className="h-8 w-8 animate-pulse" /> : <Mic className="h-8 w-8" />}
-            </button>
-            <span className="text-[11px] font-mono text-neutral-500">
-              {isRecording ? "Listening... (Tap to Finish)" : "Tap & Hold to Speak"}
-            </span>
+          <div className="text-[11px] font-mono text-neutral-500 bg-neutral-50 px-2.5 py-1.5 rounded border border-neutral-200 shrink-0">
+            Powered by Gnani AI ASR
           </div>
         </div>
 
-        {/* Real-time speech transcription preview */}
-        {transcript && (
-          <div className="mt-4 pt-4 border-t border-neutral-100 bg-neutral-50 rounded-md p-3 text-xs space-y-2">
-            <div className="flex items-center justify-between text-neutral-500">
-              <span className="font-semibold text-neutral-700 flex items-center gap-1">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                Audio Transcribed (Gnani AI)
-              </span>
-              <span className="font-mono text-[10px]">Confidence: 94.2%</span>
+        {/* Browser-Based Audio Recorder Component */}
+        <AudioRecorder
+          onSubmit={handleAudioSubmit}
+          submitLabel="Transcribe &amp; Draft Ticket"
+          maxDurationSeconds={30}
+          isSubmitting={isTranscribing}
+        />
+
+        {/* Error Callout if transcription fails */}
+        {transcriptionError && (
+          <div className="rounded-md border border-rose-200 bg-rose-50 p-3 flex items-start gap-2.5 text-xs text-rose-800">
+            <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-bold">Transcription Error</span>
+              <p>{transcriptionError}</p>
             </div>
-            <p className="font-mono text-neutral-800 text-xs italic bg-white p-2 rounded border border-neutral-200">
-              &ldquo;{transcript}&rdquo;
-            </p>
+          </div>
+        )}
+
+        {/* Real Gnani AI Speech Transcription Result */}
+        {transcriptionResult && (
+          <div className="pt-2 border-t border-neutral-100 bg-neutral-50 rounded-md p-4 text-xs space-y-3">
+            {transcriptionResult.isDuplicate && (
+              <div className="p-2 rounded bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-mono flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span>Duplicate audio submission prevented. Retrieved previous transcript.</span>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 text-neutral-600">
+              <span className="font-semibold text-neutral-900 flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <span>Verified Audio Transcript (Gnani AI STT)</span>
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px]">
+                <span className="bg-white px-2 py-0.5 rounded border border-neutral-200">
+                  Model: {transcriptionResult.model}
+                </span>
+                <span className="bg-white px-2 py-0.5 rounded border border-neutral-200">
+                  Lang: {transcriptionResult.detectedLanguage}
+                </span>
+                <span className="bg-white px-2 py-0.5 rounded border border-neutral-200">
+                  Conf: {Math.round(transcriptionResult.confidence * 100)}%
+                </span>
+                <span className="bg-white px-2 py-0.5 rounded border border-neutral-200">
+                  ASR: {typeof transcriptionResult.processingTimeSeconds === "number" ? `${transcriptionResult.processingTimeSeconds.toFixed(2)}s` : "0.0s"}
+                </span>
+                <span className="bg-white px-2 py-0.5 rounded border border-neutral-200">
+                  RT: {transcriptionResult.latencyMs}ms
+                </span>
+              </div>
+            </div>
+
+            {transcriptionResult.isEmptyTranscript ? (
+              <div className="p-3 bg-amber-50 rounded border border-amber-200 text-amber-900 space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-xs text-amber-800">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <span>No Human Speech Detected</span>
+                </div>
+                <p className="text-[11px] text-amber-700 leading-relaxed">
+                  The audio recording did not contain audible speech (only silence, ambient wind, or static was detected by the Gnani ASR model).
+                  Please re-record your voice note and speak clearly into your microphone.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <blockquote className="font-mono text-neutral-800 text-xs italic bg-white p-3 rounded border border-neutral-200 leading-relaxed shadow-2xs">
+                  &ldquo;{transcriptionResult.transcript}&rdquo;
+                </blockquote>
+
+                {/* Live Extraction Preview Card */}
+                {extractedIncident && (
+                  <div className="rounded border border-blue-200 bg-blue-50/60 p-3 text-xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-blue-900 flex items-center gap-1.5 text-xs">
+                        <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+                        <span>Incident Extraction Engine</span>
+                      </span>
+                      <span
+                        className={cn(
+                          "px-2 py-0.5 rounded text-[10px] font-mono font-bold",
+                          extractedIncident.needsClarification
+                            ? "bg-purple-100 text-purple-800"
+                            : "bg-emerald-100 text-emerald-800"
+                        )}
+                      >
+                        Status: {extractedIncident.suggestedStatus}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono">
+                      <div className="bg-white p-1.5 rounded border border-blue-200">
+                        <div className="text-[9px] text-neutral-500 uppercase">Asset Code</div>
+                        <div className="font-bold text-neutral-900">
+                          {extractedIncident.assetCode ||
+                            (extractedIncident.isAmbiguous
+                              ? "Ambiguous (Manual Select)"
+                              : "Unspecified")}
+                        </div>
+                      </div>
+                      <div className="bg-white p-1.5 rounded border border-blue-200">
+                        <div className="text-[9px] text-neutral-500 uppercase">Alarm Code</div>
+                        <div className="font-bold text-neutral-900 font-mono">
+                          {extractedIncident.reportedAlarm || "None"}
+                        </div>
+                      </div>
+                      <div className="bg-white p-1.5 rounded border border-blue-200">
+                        <div className="text-[9px] text-neutral-500 uppercase">Category</div>
+                        <div className="font-bold text-neutral-900">
+                          {extractedIncident.faultCategory}
+                        </div>
+                      </div>
+                      <div className="bg-white p-1.5 rounded border border-blue-200">
+                        <div className="text-[9px] text-neutral-500 uppercase">Suggested Priority</div>
+                        <div className="font-bold text-neutral-900">
+                          {extractedIncident.suggestedPriority}
+                        </div>
+                      </div>
+                    </div>
+
+                    {extractedIncident.needsClarification && extractedIncident.clarificationQuestion && (
+                      <div className="p-2 rounded bg-purple-50 border border-purple-200 text-purple-900 text-[11px]">
+                        <strong>Clarification Question:</strong> {extractedIncident.clarificationQuestion}
+                      </div>
+                    )}
+
+                    {extractedIncident.isAmbiguous &&
+                      extractedIncident.candidateAssets &&
+                      extractedIncident.candidateAssets.length > 0 && (
+                        <div className="p-2 rounded bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-1">
+                          <span className="font-semibold text-amber-800">
+                            Candidate Assets Identified:
+                          </span>{" "}
+                          <span className="font-mono text-[10px]">
+                            {extractedIncident.candidateAssets.map((c: any) => c.assetTag).join(", ")}
+                          </span>
+                        </div>
+                      )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-2 pt-1">
-              <Link
-                href="/incidents"
-                className="px-3 py-1.5 rounded bg-neutral-900 text-white text-xs font-semibold hover:bg-neutral-800 transition-colors"
+              <button
+                type="button"
+                onClick={() => setTranscriptionResult(null)}
+                className="px-3 py-1.5 rounded border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-600 text-xs font-medium cursor-pointer"
               >
-                Confirm Incident Draft
-              </Link>
+                Clear
+              </button>
+              {!transcriptionResult.isEmptyTranscript && (
+                <Link
+                  href={`/incidents/new?transcript=${encodeURIComponent(
+                    transcriptionResult.transcript
+                  )}&recordingId=${transcriptionResult.recordingId}`}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded bg-neutral-900 text-white text-xs font-semibold hover:bg-neutral-800 transition-colors shadow-2xs"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                  <span>Log Incident with this Voice Note</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
             </div>
           </div>
         )}

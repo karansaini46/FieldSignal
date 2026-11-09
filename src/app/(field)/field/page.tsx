@@ -36,7 +36,7 @@ export default async function FieldPage({ searchParams }: FieldPageProps) {
         ? { siteId: session.siteId }
         : {}),
       ...(session.role === "TECHNICIAN" ? { assignedToUserId: session.userId } : {}),
-      status: { in: ["ASSIGNED", "IN_PROGRESS", "OPEN"] },
+      status: { in: ["ACKNOWLEDGED", "IN_PROGRESS", "SUBMITTED"] },
     },
     include: {
       asset: { select: { assetTag: true, block: true } },

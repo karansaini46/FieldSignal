@@ -98,7 +98,7 @@ export default async function AssetsPage({ searchParams }: AssetsPageProps) {
         select: {
           incidents: {
             where: {
-              status: { in: ["OPEN", "ASSIGNED", "IN_PROGRESS"] },
+              status: { in: ["NEEDS_CLARIFICATION", "SUBMITTED", "ACKNOWLEDGED", "IN_PROGRESS"] },
             },
           },
         },

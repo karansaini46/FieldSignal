@@ -23,10 +23,20 @@ const envSchema = z.object({
     .default("fieldsignal-super-secret-jwt-key-min-32-chars-long"),
   JWT_EXPIRES_IN: z.string().default("7d"),
 
-  // Gnani AI Speech-to-Text
+  // Gnani AI Speech-to-Text (Vachana REST API v3)
   GNANI_AI_API_KEY: z.string().default("gnani_dev_api_key_placeholder"),
   GNANI_AI_ACCESS_KEY: z.string().default("gnani_dev_access_key_placeholder"),
-  GNANI_AI_ENDPOINT: z.string().url().default("https://asr.gnani.ai/v1/recognize"),
+  GNANI_AI_ENDPOINT: z.string().url().default("https://api.vachana.ai/stt/v3"),
+  GNANI_AI_MODEL: z.string().default("prisma-v3.0"),
+  GNANI_AI_LANGUAGE_CODE: z.string().default("hi-IN,en-IN"),
+  GNANI_AI_TIMEOUT_MS: z.coerce.number().default(8000),
+  GNANI_AI_MAX_RETRIES: z.coerce.number().default(2),
+  GNANI_AI_MOCK_FALLBACK: z
+    .string()
+    .optional()
+    .transform((val) => val !== "false")
+    .pipe(z.boolean())
+    .default(true),
 
   // AI Extraction Layer
   AI_PROVIDER: z.enum(["gemini", "openai"]).default("gemini"),

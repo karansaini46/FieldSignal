@@ -76,14 +76,14 @@ export async function getShellContext(
     db.incident.count({
       where: {
         ...whereIncident,
-        status: { in: ["OPEN", "ASSIGNED", "IN_PROGRESS"] },
+        status: { in: ["NEEDS_CLARIFICATION", "SUBMITTED", "ACKNOWLEDGED", "IN_PROGRESS"] },
       },
     }),
     db.incident.count({
       where: {
         ...whereIncident,
         priority: "CRITICAL",
-        status: { notIn: ["RESOLVED", "CLOSED", "REJECTED"] },
+        status: { notIn: ["RESOLVED", "CLOSED"] },
       },
     }),
   ]);
