@@ -28,16 +28,10 @@ enum SiteStatus {
 }
 
 enum AssetType {
-  CENTRAL_INVERTER
-  STRING_INVERTER
+  INVERTER
+  SOLAR_MODULE
+  COMBINER_BOX
   TRANSFORMER
-  STRING_COMBINER_BOX
-  TRACKER_CONTROLLER
-  TRACKER_MOTOR
-  MODULE_STRING
-  HT_PANEL_BREAKER
-  WEATHER_STATION
-  DC_DISCONNECT
   OTHER
 }
 
@@ -193,7 +187,7 @@ model Asset {
   children    Asset[]    @relation("AssetHierarchy")
   incidents   Incident[]
 
-  @@unique([siteId, assetTag, block])
+  @@unique([siteId, assetTag])
   @@index([siteId, assetType])
   @@index([assetTag])
   @@map("assets")

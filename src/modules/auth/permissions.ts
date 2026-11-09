@@ -43,6 +43,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, PermissionAction[]> = {
     "OVERRIDE_PRIORITY",
     "CLOSE_INCIDENT",
     "REJECT_INCIDENT",
+    "MANAGE_ASSETS",
   ],
   ADMIN: [
     "VOICE_REPORT",

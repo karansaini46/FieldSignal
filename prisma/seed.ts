@@ -173,7 +173,7 @@ async function main() {
       siteId: siteBhadla.id,
       assetTag: "HT-01",
       name: "33kV HT Vacuum Circuit Breaker",
-      assetType: AssetType.HT_PANEL_BREAKER,
+      assetType: AssetType.OTHER,
       block: "Substation-01",
       status: AssetStatus.OPERATIONAL,
       manufacturer: "ABB",
@@ -187,7 +187,7 @@ async function main() {
       siteId: siteBhadla.id,
       assetTag: "WMS-01",
       name: "Weather Monitoring Station North",
-      assetType: AssetType.WEATHER_STATION,
+      assetType: AssetType.OTHER,
       block: "Control-Room-Yard",
       status: AssetStatus.OPERATIONAL,
       manufacturer: "Campbell Scientific",
@@ -217,7 +217,7 @@ async function main() {
       parentAssetId: invSt01.id,
       assetTag: "INV-01",
       name: "Central Inverter 1 (SMA 2.5MW)",
-      assetType: AssetType.CENTRAL_INVERTER,
+      assetType: AssetType.INVERTER,
       block: "Block-A",
       status: AssetStatus.DEGRADED,
       manufacturer: "SMA Solar",
@@ -229,13 +229,13 @@ async function main() {
   });
 
   // String Combiner Boxes under Inverter 1
-  await prisma.asset.create({
+  const scb01A = await prisma.asset.create({
     data: {
       siteId: siteBhadla.id,
       parentAssetId: inv01.id,
       assetTag: "SCB-01-A",
       name: "String Combiner Box 1A (24-Channel)",
-      assetType: AssetType.STRING_COMBINER_BOX,
+      assetType: AssetType.COMBINER_BOX,
       block: "Block-A",
       row: "Row 01",
       status: AssetStatus.OPERATIONAL,
@@ -251,7 +251,7 @@ async function main() {
       parentAssetId: inv01.id,
       assetTag: "SCB-01-B",
       name: "String Combiner Box 1B (24-Channel)",
-      assetType: AssetType.STRING_COMBINER_BOX,
+      assetType: AssetType.COMBINER_BOX,
       block: "Block-A",
       row: "Row 02",
       status: AssetStatus.OPERATIONAL,
@@ -261,13 +261,32 @@ async function main() {
     },
   });
 
+  // Solar Module Strings under Combiner Box
+  await prisma.asset.create({
+    data: {
+      siteId: siteBhadla.id,
+      parentAssetId: scb01A.id,
+      assetTag: "MOD-STR-01",
+      name: "Solar PV Module String 01 (540W Mono PERC)",
+      assetType: AssetType.SOLAR_MODULE,
+      block: "Block-A",
+      row: "Row 01",
+      status: AssetStatus.OPERATIONAL,
+      manufacturer: "LONGi Solar",
+      model: "Hi-MO 5 LR5-72HBD-540M",
+      serialNumber: "LON-540-08129",
+      ratedCapacityKw: 15.1,
+      metadata: { modulesPerString: 28, cellType: "Bifacial Mono PERC" },
+    },
+  });
+
   // Tracker Motor in Block-A
   await prisma.asset.create({
     data: {
       siteId: siteBhadla.id,
       assetTag: "TRK-M-01",
       name: "Single-Axis Slew Drive Tracker Motor 01",
-      assetType: AssetType.TRACKER_MOTOR,
+      assetType: AssetType.OTHER,
       block: "Block-A",
       row: "Row 01-05",
       status: AssetStatus.OPERATIONAL,
@@ -283,7 +302,7 @@ async function main() {
       siteId: siteBhadla.id,
       assetTag: "INV-03",
       name: "Central Inverter 3 (ABB 2MW)",
-      assetType: AssetType.CENTRAL_INVERTER,
+      assetType: AssetType.INVERTER,
       block: "Block-B",
       status: AssetStatus.FAULTED,
       manufacturer: "ABB",
@@ -314,7 +333,7 @@ async function main() {
       siteId: sitePavagada.id,
       assetTag: "STR-INV-01",
       name: "String Inverter 01 (Sungrow 250kW)",
-      assetType: AssetType.STRING_INVERTER,
+      assetType: AssetType.INVERTER,
       block: "Block-01",
       row: "Row 01",
       status: AssetStatus.OPERATIONAL,
@@ -331,7 +350,7 @@ async function main() {
       siteId: sitePavagada.id,
       assetTag: "TRK-M-PV-01",
       name: "Horizon Single-Axis Tracker Drive 01",
-      assetType: AssetType.TRACKER_MOTOR,
+      assetType: AssetType.OTHER,
       block: "Block-01",
       row: "Row 01-08",
       status: AssetStatus.OPERATIONAL,
@@ -570,7 +589,7 @@ async function main() {
       siteId: siteApex.id,
       assetTag: "INV-APEX-01",
       name: "Central Inverter Rewa 01",
-      assetType: AssetType.CENTRAL_INVERTER,
+      assetType: AssetType.INVERTER,
       block: "Block-Rewa-1",
     },
   });

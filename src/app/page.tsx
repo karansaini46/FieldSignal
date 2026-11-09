@@ -1,5 +1,7 @@
 import React from "react";
 import Link from "next/link";
+import { Header } from "@/components/common/header";
+import { Footer } from "@/components/common/footer";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -58,7 +60,10 @@ export default function Home() {
   ];
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-12 sm:px-8">
+    <div className="min-h-screen flex flex-col bg-background">
+      <Header />
+      <main className="flex-1">
+        <div className="container mx-auto max-w-6xl px-4 py-12 sm:px-8">
       {/* Hero / System Foundation Banner */}
       <div className="flex flex-col gap-6 text-center sm:text-left">
         <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
@@ -187,5 +192,8 @@ export default function Home() {
         </div>
       </div>
     </div>
-  );
+  </main>
+  <Footer />
+</div>
+);
 }

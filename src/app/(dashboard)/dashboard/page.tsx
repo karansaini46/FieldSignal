@@ -1,193 +1,194 @@
 import React from "react";
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getSessionFromCookies } from "@/lib/session";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { getShellContext } from "@/lib/shell-context";
+import { AppShell } from "@/components/shell/app-shell";
+import { TechnicianDashboard } from "@/components/dashboard/technician-dashboard";
+import { SupervisorDashboard } from "@/components/dashboard/supervisor-dashboard";
+import { AdminDashboard } from "@/components/dashboard/admin-dashboard";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
-import { ShieldAlert, ClipboardList, CheckCircle2, Clock, Layers, ArrowRight } from "lucide-react";
 
-export default async function DashboardPage() {
+interface DashboardPageProps {
+  searchParams?: Promise<{ siteId?: string }>;
+}
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const session = await getSessionFromCookies();
 
-  // Multi-tenant scoped query
-  const where: Prisma.IncidentWhereInput = {
-    site: {
-      organizationId: session?.organizationId ?? "",
-    },
-  };
-
-  if (session?.role === "SUPERVISOR" && session.siteId) {
-    where.siteId = session.siteId;
+  if (!session) {
+    redirect("/login");
   }
 
-  const [openCount, inProgressCount, criticalCount, recentIncidents] = await Promise.all([
-    db.incident.count({ where: { ...where, status: "OPEN" } }),
-    db.incident.count({ where: { ...where, status: "IN_PROGRESS" } }),
-    db.incident.count({ where: { ...where, priority: "CRITICAL" } }),
-    db.incident.findMany({
-      where,
-      include: {
-        site: { select: { name: true, code: true } },
-        asset: { select: { assetTag: true, name: true } },
-        reportedBy: { select: { name: true, role: true } },
+  const resolvedParams = searchParams ? await searchParams : {};
+  const activeSiteFilter = resolvedParams.siteId;
+
+  const shellData = await getShellContext(session, activeSiteFilter);
+
+  if (!shellData) {
+    redirect("/login");
+  }
+
+  // 1. TECHNICIAN VIEW
+  if (session.role === "TECHNICIAN") {
+    const assignedIncidents = await db.incident.findMany({
+      where: {
+        assignedToUserId: session.userId,
+        status: { in: ["ASSIGNED", "IN_PROGRESS", "OPEN"] },
       },
-      orderBy: { createdAt: "desc" },
-      take: 5,
+      include: {
+        asset: { select: { assetTag: true, block: true } },
+        site: { select: { name: true, code: true } },
+      },
+      orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
+    });
+
+    const activeSite = shellData.sites.find((s) => s.id === (activeSiteFilter || session.siteId)) || shellData.sites[0];
+
+    return (
+      <AppShell
+        session={shellData.session}
+        sites={shellData.sites}
+        openTicketsCount={shellData.openTicketsCount}
+        criticalTicketsCount={shellData.criticalTicketsCount}
+      >
+        <TechnicianDashboard
+          technicianName={session.name}
+          siteName={activeSite?.name || "Bhadla Solar Park"}
+          siteCode={activeSite?.code || "SUN-BHA-04"}
+          assignedIncidents={assignedIncidents}
+        />
+      </AppShell>
+    );
+  }
+
+  // Common where clause for Supervisor / Admin scoped queries
+  const whereIncident: Prisma.IncidentWhereInput = {
+    site: { organizationId: session.organizationId },
+  };
+
+  const whereAsset: Prisma.AssetWhereInput = {
+    site: { organizationId: session.organizationId },
+  };
+
+  if (activeSiteFilter && activeSiteFilter !== "all") {
+    whereIncident.siteId = activeSiteFilter;
+    whereAsset.siteId = activeSiteFilter;
+  } else if (session.role === "SUPERVISOR" && session.siteId) {
+    whereIncident.siteId = session.siteId;
+    whereAsset.siteId = session.siteId;
+  }
+
+  // 2. SUPERVISOR VIEW
+  if (session.role === "SUPERVISOR") {
+    const [openCount, inProgressCount, criticalCount, totalAssets, faultedAssets, recentIncidents] =
+      await Promise.all([
+        db.incident.count({ where: { ...whereIncident, status: "OPEN" } }),
+        db.incident.count({ where: { ...whereIncident, status: "IN_PROGRESS" } }),
+        db.incident.count({ where: { ...whereIncident, priority: "CRITICAL" } }),
+        db.asset.count({ where: whereAsset }),
+        db.asset.count({
+          where: { ...whereAsset, status: { in: ["FAULTED", "DEGRADED"] } },
+        }),
+        db.incident.findMany({
+          where: whereIncident,
+          include: {
+            site: { select: { name: true, code: true } },
+            asset: { select: { assetTag: true, name: true } },
+            reportedBy: { select: { name: true, role: true } },
+            assignedTo: { select: { name: true, role: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 6,
+        }),
+      ]);
+
+    const activeSite = shellData.sites.find((s) => s.id === (activeSiteFilter || session.siteId)) || shellData.sites[0];
+
+    return (
+      <AppShell
+        session={shellData.session}
+        sites={shellData.sites}
+        openTicketsCount={shellData.openTicketsCount}
+        criticalTicketsCount={shellData.criticalTicketsCount}
+      >
+        <SupervisorDashboard
+          supervisorName={session.name}
+          siteName={activeSite?.name || "Bhadla Solar Operations"}
+          siteCode={activeSite?.code || "SUN-BHA-04"}
+          capacityMw={activeSite?.capacityMw || 50}
+          openCount={openCount}
+          inProgressCount={inProgressCount}
+          criticalCount={criticalCount}
+          totalAssetsCount={totalAssets}
+          faultedAssetsCount={faultedAssets}
+          recentIncidents={recentIncidents}
+        />
+      </AppShell>
+    );
+  }
+
+  // 3. ADMIN VIEW
+  const [sitesWithStats, allUsers, totalIncidents, totalAssets] = await Promise.all([
+    db.site.findMany({
+      where: { organizationId: session.organizationId },
+      include: {
+        _count: {
+          select: {
+            assets: true,
+            incidents: {
+              where: { status: { notIn: ["RESOLVED", "CLOSED", "REJECTED"] } },
+            },
+          },
+        },
+      },
+      orderBy: { name: "asc" },
     }),
+    db.user.findMany({
+      where: { organizationId: session.organizationId },
+      include: { site: { select: { name: true } } },
+      orderBy: [{ role: "asc" }, { name: "asc" }],
+    }),
+    db.incident.count({ where: { site: { organizationId: session.organizationId } } }),
+    db.asset.count({ where: { site: { organizationId: session.organizationId } } }),
   ]);
 
+  const formattedSites = sitesWithStats.map((s) => ({
+    id: s.id,
+    name: s.name,
+    code: s.code,
+    capacityMw: Number(s.capacityMw),
+    location: s.location,
+    status: s.status,
+    assetsCount: s._count.assets,
+    openIncidentsCount: s._count.incidents,
+  }));
+
+  const formattedUsers = allUsers.map((u) => ({
+    id: u.id,
+    name: u.name,
+    phone: u.phone,
+    email: u.email,
+    role: u.role,
+    siteName: u.site?.name ?? null,
+    isActive: u.isActive,
+  }));
+
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-8 sm:px-8 space-y-8">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Operations Triage Dashboard
-            </h1>
-            <Badge variant="outline" className="text-xs">
-              {session?.role}
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Scoped to Organization:{" "}
-            <span className="font-semibold text-foreground">Sunrise Solar Operations</span>
-            {session?.siteId ? ` • Site ID: ${session.siteId}` : " • Portfolio (All Sites)"}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Link
-            href="/incidents"
-            className={buttonVariants({
-              variant: "outline",
-              size: "sm",
-              className: "text-xs gap-1.5",
-            })}
-          >
-            <ClipboardList className="h-3.5 w-3.5" />
-            <span>View All Tickets</span>
-          </Link>
-          <Link
-            href="/field"
-            className={buttonVariants({
-              variant: "default",
-              size: "sm",
-              className: "text-xs gap-1.5",
-            })}
-          >
-            <span>Voice Field Mode</span>
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="border-amber-500/20 bg-amber-500/5">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs flex items-center justify-between">
-              <span>Open & Pending Triage</span>
-              <Clock className="h-4 w-4 text-amber-600" />
-            </CardDescription>
-            <CardTitle className="text-2xl font-bold text-amber-700">{openCount}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-[11px] text-muted-foreground">Requiring technician assignment</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-blue-500/20 bg-blue-500/5">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs flex items-center justify-between">
-              <span>Work In Progress</span>
-              <CheckCircle2 className="h-4 w-4 text-blue-600" />
-            </CardDescription>
-            <CardTitle className="text-2xl font-bold text-blue-700">{inProgressCount}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-[11px] text-muted-foreground">Field technician repairs active</p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-rose-500/20 bg-rose-500/5">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-xs flex items-center justify-between">
-              <span>Critical Severity Incidents</span>
-              <ShieldAlert className="h-4 w-4 text-rose-600" />
-            </CardDescription>
-            <CardTitle className="text-2xl font-bold text-rose-700">{criticalCount}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-[11px] text-muted-foreground">Immediate generation / safety risk</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Live Ticket Feed */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-foreground flex items-center gap-2">
-            <ClipboardList className="h-4 w-4 text-primary" />
-            <span>Recent Maintenance Incidents</span>
-          </h2>
-          <span className="text-xs text-muted-foreground">
-            Server-side isolated to your organization
-          </span>
-        </div>
-
-        <div className="space-y-3">
-          {recentIncidents.map((incident) => (
-            <div
-              key={incident.id}
-              className="flex flex-col sm:flex-row items-start sm:items-center justify-between rounded-lg border bg-card p-4 transition hover:bg-muted/40 gap-3"
-            >
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-foreground">
-                    {incident.ticketNumber}
-                  </span>
-                  <Badge
-                    variant={incident.priority === "CRITICAL" ? "destructive" : "outline"}
-                    className="text-[10px]"
-                  >
-                    {incident.priority}
-                  </Badge>
-                  <Badge variant="secondary" className="text-[10px]">
-                    {incident.status}
-                  </Badge>
-                  {incident.asset && (
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Layers className="h-3 w-3" />
-                      <span>{incident.asset.assetTag}</span>
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm font-medium text-foreground">{incident.title}</p>
-                <p className="text-xs text-muted-foreground">
-                  Site: <span className="text-foreground">{incident.site.name}</span> • Reported by{" "}
-                  {incident.reportedBy.name}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 self-end sm:self-center">
-                <Link
-                  href={`/incidents`}
-                  className={buttonVariants({
-                    variant: "outline",
-                    size: "sm",
-                    className: "text-xs",
-                  })}
-                >
-                  Manage Ticket
-                </Link>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+    <AppShell
+      session={shellData.session}
+      sites={shellData.sites}
+      openTicketsCount={shellData.openTicketsCount}
+      criticalTicketsCount={shellData.criticalTicketsCount}
+    >
+      <AdminDashboard
+        adminName={session.name}
+        organizationName={shellData.session.organizationName || "Sunrise Solar Operations"}
+        sites={formattedSites}
+        users={formattedUsers}
+        totalIncidents={totalIncidents}
+        totalAssets={totalAssets}
+      />
+    </AppShell>
   );
 }
