@@ -4,7 +4,13 @@ import { db } from "@/lib/db";
 import { requireAuth, assertSiteAccess, assertTechnicianMutationAllowed } from "@/lib/auth-guard";
 import { handleApiError, NotFoundError, ForbiddenError, ValidationError } from "@/lib/errors";
 import { apiSuccess, apiPaginated } from "@/lib/api-response";
-import { IncidentPriority, FaultCategory, IncidentStatus, Prisma } from "@prisma/client";
+import {
+  IncidentPriority,
+  FaultCategory,
+  IncidentStatus,
+  ClarificationStatus,
+  Prisma,
+} from "@prisma/client";
 import { assertAiExtractionApproval } from "@/modules/incidents/ai-guard";
 import { getIncidentValidationService } from "@/modules/incidents";
 
@@ -254,6 +260,18 @@ export async function POST(req: NextRequest) {
 
     const isConfirmed = targetStatus !== IncidentStatus.DRAFT;
 
+    // If ticket is created in NEEDS_CLARIFICATION, persist initial Clarification request
+    let initialClarificationQuestion: string | null = null;
+    let initialClarificationField: string | null = null;
+
+    if (
+      targetStatus === IncidentStatus.NEEDS_CLARIFICATION &&
+      validationReport.clarificationQuestions.length > 0
+    ) {
+      initialClarificationQuestion = validationReport.clarificationQuestions[0] || null;
+      initialClarificationField = validationReport.missingFields[0] || "general";
+    }
+
     // Create incident and initial audit event in transaction
     const incident = await db.$transaction(async (tx) => {
       const created = await tx.incident.create({
@@ -277,6 +295,15 @@ export async function POST(req: NextRequest) {
           audioRecordingId: data.audioRecordingId,
           missingFields: data.missingFields || [],
           confirmedAt: isConfirmed ? new Date() : null,
+          clarifications: initialClarificationQuestion
+            ? {
+                create: {
+                  question: initialClarificationQuestion,
+                  missingField: initialClarificationField,
+                  status: ClarificationStatus.PENDING,
+                },
+              }
+            : undefined,
           events: {
             create: {
               userId: session.userId,

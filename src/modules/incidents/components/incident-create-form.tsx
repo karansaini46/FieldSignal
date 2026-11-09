@@ -22,6 +22,8 @@ import {
   HelpCircle,
   Mic,
   Radio,
+  Send,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AudioRecorder, RecordedAudioData } from "@/modules/speech";
@@ -99,9 +101,69 @@ export function IncidentCreateForm({
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Clarification interactive state
+  const [clarificationAnswer, setClarificationAnswer] = useState("");
+  const [isAnsweringClarification, setIsAnsweringClarification] = useState(false);
+  const [clarificationHistory, setClarificationHistory] = useState<any[]>([]);
+  const [showClarificationVoice, setShowClarificationVoice] = useState(false);
+
   const filteredAssets = assets.filter((a) => a.siteId === siteId);
   const selectedAsset = assets.find((a) => a.id === assetId);
   const isSupervisorOrAdmin = userRole === "SUPERVISOR" || userRole === "ADMIN";
+
+  async function handleAnswerClarification(answerText: string, fromVoice = false) {
+    if (!extractedData || !answerText.trim() || !siteId) return;
+
+    let field = "asset";
+    const qLower = (extractedData.clarificationQuestion || "").toLowerCase();
+    if (qLower.includes("alarm") || qLower.includes("error code")) field = "alarm_code";
+    else if (qLower.includes("current") || qLower.includes("status")) field = "current_status";
+    else if (qLower.includes("result") || qLower.includes("outcome")) field = "repair_result";
+    else if (qLower.includes("which") || qLower.includes("equipment") || qLower.includes("tag")) field = "asset";
+    else if (qLower.includes("symptom")) field = "symptoms";
+
+    setIsAnsweringClarification(true);
+    try {
+      const res = await fetch("/api/v1/incidents/clarify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          siteId,
+          field,
+          response: answerText.trim(),
+          fromVoice,
+          currentExtraction: extractedData,
+          history: clarificationHistory,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success && json.data) {
+        const { updatedExtraction, history: newHistory } = json.data;
+        setExtractedData(updatedExtraction);
+        setClarificationHistory(newHistory);
+        setClarificationAnswer("");
+        setShowClarificationVoice(false);
+
+        if (updatedExtraction.matchedAssetId && !assetId) {
+          setAssetId(updatedExtraction.matchedAssetId);
+        }
+        if (updatedExtraction.reportedAlarm && !errorCode) {
+          setErrorCode(updatedExtraction.reportedAlarm);
+        }
+        if (updatedExtraction.symptoms && updatedExtraction.symptoms.length > 0) {
+          setSymptoms(updatedExtraction.symptoms.join(", "));
+        }
+        if (updatedExtraction.faultDescription && (!description || description === initialTranscript)) {
+          setDescription(updatedExtraction.faultDescription);
+        }
+      }
+    } catch (err) {
+      console.warn("Clarification error:", err);
+    } finally {
+      setIsAnsweringClarification(false);
+    }
+  }
 
   // Function to run extraction engine on transcript/description
   async function runExtraction(transcriptText: string) {
@@ -290,9 +352,9 @@ export function IncidentCreateForm({
         </div>
       )}
 
-      {/* AI Extraction Clarification Required Banner */}
+      {/* AI Extraction Clarification Required Banner with Interactive Text & Voice Workflow */}
       {extractedData && extractedData.needsClarification && (
-        <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 space-y-2.5 text-xs shadow-2xs">
+        <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 space-y-3 text-xs shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="font-bold text-purple-900 flex items-center gap-1.5">
               <HelpCircle className="h-4 w-4 text-purple-600" />
@@ -302,11 +364,117 @@ export function IncidentCreateForm({
               Status: NEEDS_CLARIFICATION
             </span>
           </div>
-          <p className="font-medium text-purple-950 text-xs leading-relaxed italic bg-white p-2.5 rounded border border-purple-200">
-            &ldquo;{extractedData.clarificationQuestion}&rdquo;
-          </p>
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-purple-800 font-mono">
-            <span className="font-bold">Missing details:</span>
+
+          <div className="space-y-1">
+            <span className="text-[10px] font-mono text-purple-700 uppercase font-semibold">
+              Current Focused Question:
+            </span>
+            <p className="font-medium text-purple-950 text-xs leading-relaxed italic bg-white p-2.5 rounded border border-purple-200">
+              &ldquo;{extractedData.clarificationQuestion}&rdquo;
+            </p>
+          </div>
+
+          {/* Interactive Answer Box: Text or Voice Note */}
+          <div className="space-y-2 pt-1 border-t border-purple-100">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-mono text-purple-800 font-semibold">
+                {showClarificationVoice ? "Speak response (Gnani ASR):" : "Type response to question:"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowClarificationVoice(!showClarificationVoice)}
+                className="inline-flex items-center gap-1 text-[11px] font-mono text-purple-700 hover:text-purple-900 bg-white px-2 py-0.5 rounded border border-purple-200 shadow-2xs hover:bg-purple-100 transition-colors cursor-pointer"
+              >
+                {showClarificationVoice ? (
+                  <>
+                    <MessageSquare className="h-3 w-3 text-purple-600" />
+                    <span>Switch to Text</span>
+                  </>
+                ) : (
+                  <>
+                    <Radio className="h-3 w-3 text-purple-600 animate-pulse" />
+                    <span>Speak Answer</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {showClarificationVoice ? (
+              <div className="bg-white p-2.5 rounded border border-purple-200">
+                <AudioRecorder
+                  onSubmit={async (data) => {
+                    const formData = new FormData();
+                    formData.append("audio_file", data.blob, data.fileName);
+                    const res = await fetch("/api/v1/speech/transcribe", { method: "POST", body: formData });
+                    const json = await res.json();
+                    if (json.success && json.data.transcript) {
+                      await handleAnswerClarification(json.data.transcript, true);
+                    }
+                  }}
+                  submitLabel="Transcribe &amp; Answer"
+                  maxDurationSeconds={30}
+                  isSubmitting={isAnsweringClarification}
+                />
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={clarificationAnswer}
+                  onChange={(e) => setClarificationAnswer(e.target.value)}
+                  placeholder="Enter answer (e.g. INV-01, E-402, still tripped)..."
+                  disabled={isAnsweringClarification}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAnswerClarification(clarificationAnswer, false);
+                    }
+                  }}
+                  className="flex-1 px-3 py-1.5 text-xs rounded border border-purple-200 bg-white focus:outline-hidden focus:ring-1 focus:ring-purple-600 font-mono text-neutral-900 placeholder:text-neutral-400"
+                />
+                <button
+                  type="button"
+                  disabled={isAnsweringClarification || !clarificationAnswer.trim()}
+                  onClick={() => handleAnswerClarification(clarificationAnswer, false)}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-purple-700 text-white text-xs font-semibold hover:bg-purple-800 disabled:opacity-50 transition-colors cursor-pointer shrink-0"
+                >
+                  {isAnsweringClarification ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                  <span>Answer</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Clarification History */}
+          {clarificationHistory.length > 0 && (
+            <div className="space-y-1.5 pt-2 border-t border-purple-200/60">
+              <span className="text-[10px] font-mono text-purple-700 uppercase font-semibold">
+                Clarification History ({clarificationHistory.length}):
+              </span>
+              <div className="space-y-1 font-mono text-[11px]">
+                {clarificationHistory.map((item, i) => (
+                  <div key={i} className="bg-white/90 p-2 rounded border border-purple-200 flex items-start justify-between gap-2">
+                    <div>
+                      <span className="text-neutral-500 block text-[10px]">Q: {item.question}</span>
+                      <span className="text-emerald-800 font-bold">A: &ldquo;{item.response}&rdquo;</span>
+                    </div>
+                    {item.fromVoice && (
+                      <span className="text-[9px] bg-purple-50 text-purple-700 px-1 py-0.5 rounded border border-purple-200 shrink-0">
+                        Voice
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-purple-800 font-mono pt-1">
+            <span className="font-bold">Remaining missing details:</span>
             {extractedData.missingInformation.map((m: string, idx: number) => (
               <span key={idx} className="bg-purple-100 px-1.5 py-0.5 rounded border border-purple-200">
                 {m}

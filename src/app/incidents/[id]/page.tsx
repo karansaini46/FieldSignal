@@ -13,6 +13,7 @@ import {
 } from "@/modules/incidents/types";
 import { IncidentStatusActions } from "@/modules/incidents/components/incident-status-actions";
 import { IncidentTimeline } from "@/modules/incidents/components/incident-timeline";
+import { IncidentClarificationCard } from "@/modules/incidents/components/incident-clarification-card";
 import {
   ChevronLeft,
   MapPin,
@@ -383,6 +384,15 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
             )}
           </div>
         </div>
+
+        {/* Feature: Clarification Workflow (One focused question at a time & history) */}
+        {(incident.status === "NEEDS_CLARIFICATION" || incident.clarifications.length > 0) && (
+          <IncidentClarificationCard
+            incidentId={incident.id}
+            clarifications={incident.clarifications as any}
+            isEditable={incident.status !== "CLOSED"}
+          />
+        )}
 
         {/* Feature 8 & 9: Incident Timeline & Audit Trail */}
         <div className="rounded-lg border border-neutral-200 bg-white p-5 space-y-4 shadow-2xs">
