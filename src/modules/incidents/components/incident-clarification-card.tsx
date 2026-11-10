@@ -15,7 +15,7 @@ import {
   Radio,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AudioRecorder, RecordedAudioData } from "@/modules/speech";
+import { AudioRecorder, RecordedAudioData, TtsPlayer } from "@/modules/speech";
 
 export interface ClarificationRecord {
   id: string;
@@ -167,6 +167,13 @@ export function IncidentClarificationCard({
               <p className="text-xs sm:text-sm font-semibold text-purple-950 leading-relaxed">
                 {currentClarification.question}
               </p>
+              <div className="pt-1">
+                <TtsPlayer
+                  text={currentClarification.question}
+                  label="Listen to Question (Timbre v3.0)"
+                  allowSettings={true}
+                />
+              </div>
             </div>
           </div>
 

@@ -38,6 +38,13 @@ const envSchema = z.object({
     .pipe(z.boolean())
     .default(true),
 
+  // Gnani AI Text-to-Speech (Timbre REST API v3.0)
+  GNANI_TTS_ENDPOINT: z.string().url().default("https://api.vachana.ai/api/v1/tts/inference"),
+  GNANI_TTS_MODEL: z.string().default("timbre-v3.0"),
+  GNANI_TTS_VOICE: z.string().default("Shivani"),
+  GNANI_TTS_LANGUAGE: z.string().default("hi-IN"),
+  GNANI_TTS_SPEED: z.coerce.number().default(1.0),
+
   // AI Extraction Layer
   AI_PROVIDER: z.enum(["gemini", "openai"]).default("gemini"),
   AI_API_KEY: z.string().default("ai_service_api_key_placeholder"),

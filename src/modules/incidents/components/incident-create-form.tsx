@@ -34,7 +34,7 @@ import {
   Edit3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AudioRecorder, RecordedAudioData } from "@/modules/speech";
+import { AudioRecorder, RecordedAudioData, TtsPlayer } from "@/modules/speech";
 import { HistoricalIntelligenceCard } from "./historical-intelligence-card";
 import { HistoricalIntelligenceReport } from "../historical-intelligence";
 
@@ -511,6 +511,23 @@ export function IncidentCreateForm({
           </span>
         </div>
 
+        {/* Gnani AI Timbre Audio Readout for Confirmation Receipt (Use Case 2) */}
+        <div className="p-3.5 rounded-lg border border-neutral-200 bg-neutral-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <span className="text-xs font-bold text-neutral-800 block">
+              Spoken Voice Receipt (Gnani AI Timbre v3.0)
+            </span>
+            <p className="text-[11px] text-neutral-500">
+              Optional audio readout for ticket {confirmedIncident.ticketNumber} and on-site dispatch status.
+            </p>
+          </div>
+          <TtsPlayer
+            text={`Incident ${confirmedIncident.ticketNumber} for ${selectedSite?.name || "solar plant"} has been verified and confirmed. Initial status is ${confirmedIncident.status}. Logged in supervisor queue.`}
+            label="Read Confirmation"
+            allowSettings={true}
+          />
+        </div>
+
         <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
           <button
             type="button"
@@ -867,6 +884,13 @@ export function IncidentCreateForm({
             <p className="font-medium text-purple-950 text-xs leading-relaxed italic bg-white p-2.5 rounded border border-purple-200">
               &ldquo;{extractedData.clarificationQuestion}&rdquo;
             </p>
+            <div className="pt-0.5">
+              <TtsPlayer
+                text={extractedData.clarificationQuestion}
+                label="Listen to Question (Timbre v3.0)"
+                allowSettings={true}
+              />
+            </div>
           </div>
 
           {/* Interactive Answer Box: Text or Voice Note */}

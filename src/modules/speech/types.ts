@@ -74,3 +74,78 @@ export interface ISpeechService {
   /** Returns a new service instance with an alternate model version (for zero-downtime version swaps) */
   withModel(modelVersion: GnaniModelVersion): ISpeechService;
 }
+
+/**
+ * Gnani AI Text-to-Speech (TTS - Timbre) Interface Contracts
+ * Grounded in official Gnani.ai / Vachana Timbre API specifications.
+ */
+
+export type GnaniTtsModelVersion = "timbre-v3.0" | "timbre-v2.5" | string;
+export type GnaniTtsVoice =
+  | "Shivani"
+  | "Lakshmi"
+  | "Kalpana"
+  | "Chetana"
+  | "Vasudha"
+  | "Riyaa"
+  | "Tarika"
+  | "Avinash"
+  | "Shubham"
+  | "Prakash"
+  | "Devansh"
+  | "Yashraj"
+  | string;
+
+export type GnaniTtsLanguage =
+  | "hi-IN"
+  | "en-IN"
+  | "hi-en"
+  | "ta-IN"
+  | "te-IN"
+  | "kn-IN"
+  | "mr-IN"
+  | "bn-IN"
+  | "gu-IN"
+  | "pa-IN"
+  | "ml-IN"
+  | string;
+
+export type GnaniTtsAudioFormat = "wav" | "mp3";
+
+export interface GnaniTtsConfig {
+  apiKey: string;
+  endpoint: string;
+  modelVersion: GnaniTtsModelVersion;
+  defaultVoice: GnaniTtsVoice;
+  defaultLanguage: GnaniTtsLanguage;
+  defaultSpeed: number;
+  timeoutMs: number;
+  maxRetries: number;
+  allowMockFallbackInDev: boolean;
+}
+
+export interface SynthesizeSpeechRequest {
+  text: string;
+  voice?: GnaniTtsVoice;
+  language?: GnaniTtsLanguage;
+  model?: GnaniTtsModelVersion;
+  speed?: number;
+  format?: GnaniTtsAudioFormat;
+}
+
+export interface SynthesizeSpeechResult {
+  audioBuffer: Buffer;
+  contentType: string;
+  voice: string;
+  model: string;
+  language: string;
+  speed: number;
+  isMock: boolean;
+  latencyMs: number;
+}
+
+export interface ITtsService {
+  synthesize(request: SynthesizeSpeechRequest): Promise<SynthesizeSpeechResult>;
+  getModelVersion(): string;
+}
+

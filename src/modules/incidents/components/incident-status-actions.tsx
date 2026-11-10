@@ -16,6 +16,7 @@ import {
   Loader2,
   ShieldAlert,
 } from "lucide-react";
+import { TtsPlayer } from "@/modules/speech";
 
 interface TechnicianOption {
   id: string;
@@ -140,9 +141,17 @@ export function IncidentStatusActions({
         <h2 className="text-xs font-bold font-mono uppercase tracking-wider text-neutral-800">
           Workflow Status & Dispatch Controls
         </h2>
-        <span className="text-[11px] font-mono text-neutral-500">
-          Role: <span className="font-semibold text-neutral-800">{userRole}</span>
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-mono text-neutral-500">
+            Role: <span className="font-semibold text-neutral-800">{userRole}</span>
+          </span>
+          <TtsPlayer
+            text={`Incident is currently ${currentStatus}, with ${currentPriority} priority. ${assignedToUserId ? "Assigned for field action." : "Currently unassigned."}`}
+            label="Speak Status"
+            compact={true}
+            allowSettings={true}
+          />
+        </div>
       </div>
 
       {error && (

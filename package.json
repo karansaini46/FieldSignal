@@ -20,7 +20,8 @@
     "test:clarification": "tsx scripts/test-clarification-workflow.ts",
     "test:historical": "tsx scripts/test-historical-intelligence.ts",
     "test:confirmation": "tsx scripts/test-technician-confirmation-workflow.ts",
-    "test:supervisor": "tsx scripts/test-supervisor-dashboard.ts"
+    "test:supervisor": "tsx scripts/test-supervisor-dashboard.ts",
+    "test:tts": "tsx scripts/test-gnani-timbre-tts.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

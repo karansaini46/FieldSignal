@@ -50,6 +50,7 @@ import {
   Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TtsPlayer } from "@/modules/speech";
 
 export interface IncidentItem {
   id: string;
@@ -1443,8 +1444,16 @@ export function SupervisorDashboard({
                     {INCIDENT_STATUS_META[selectedIncident.status]?.label}
                   </span>
                 </div>
-                <div className="text-xs text-neutral-500 font-mono mt-0.5">
-                  Site: {selectedIncident.site.name} ({selectedIncident.site.code})
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="text-xs text-neutral-500 font-mono">
+                    Site: {selectedIncident.site.name} ({selectedIncident.site.code})
+                  </div>
+                  <TtsPlayer
+                    text={`Ticket ${selectedIncident.ticketNumber}: ${selectedIncident.title}. Status is ${selectedIncident.status}, priority ${selectedIncident.priority}.`}
+                    label="Speak Status"
+                    compact={true}
+                    allowSettings={true}
+                  />
                 </div>
               </div>
 
