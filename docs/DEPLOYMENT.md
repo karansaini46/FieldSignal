@@ -219,3 +219,4 @@ Verify presence of `x-frame-options: DENY`, `x-content-type-options: nosniff`, a
 | **Health Check Telemetry** | PASS | Active PostgreSQL `SELECT 1` ping + latency + memory reporting |
 | **Error Boundaries** | PASS | Custom `not-found.tsx`, `error.tsx`, and `global-error.tsx` in place |
 | **Zero External Font Build Failures** | PASS | System-backed typography stack eliminates external CDN dependency |
+
