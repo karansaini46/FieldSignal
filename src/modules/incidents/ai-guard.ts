@@ -23,7 +23,12 @@ export function assertAiExtractionApproval({
 }: AiApprovalCheckParams): void {
   const isAutomated = Boolean(isAiExtracted || fromVoice);
 
-  if (isAutomated && targetStatus !== "DRAFT" && !userConfirmed) {
+  if (
+    isAutomated &&
+    targetStatus !== "DRAFT" &&
+    targetStatus !== "NEEDS_CLARIFICATION" &&
+    !userConfirmed
+  ) {
     throw new ValidationError(
       "AI extraction results require explicit user review and confirmation before creating a confirmed incident."
     );

@@ -26,17 +26,21 @@ const createIncidentSchema = z.object({
     .min(5, "Description must be at least 5 characters")
     .max(5000, "Description cannot exceed 5000 characters"),
   symptoms: z.string().max(2000, "Symptoms cannot exceed 2000 characters").optional().nullable(),
+  actionsAlreadyTaken: z.string().max(2000, "Actions taken cannot exceed 2000 characters").optional().nullable(),
   errorCode: z.string().max(50, "Error code cannot exceed 50 characters").optional().nullable(),
   priority: z.nativeEnum(IncidentPriority).default(IncidentPriority.MEDIUM),
   faultCategory: z.nativeEnum(FaultCategory).default(FaultCategory.OTHER),
   status: z.nativeEnum(IncidentStatus).optional(),
   assignedToUserId: z.string().uuid().optional().nullable(),
   isAiExtracted: z.boolean().optional().default(false),
-  userConfirmed: z.boolean().optional().default(false),
+  userConfirmed: z.boolean().optional(),
   originalTranscript: z.string().max(10000).optional().nullable(),
   detectedLanguage: z.string().max(20).optional().nullable(),
   audioRecordingId: z.string().uuid().optional().nullable(),
   missingFields: z.array(z.string()).optional().default([]),
+  idempotencyKey: z.string().max(120).optional().nullable(),
+  validatedExtraction: z.any().optional().nullable(),
+  confirmationNotes: z.string().max(1000).optional().nullable(),
 });
 
 /**
@@ -160,8 +164,73 @@ export async function POST(req: NextRequest) {
       throw new NotFoundError("Site not found or does not belong to your organization.");
     }
 
+    const idempotencyKey =
+      req.headers.get("idempotency-key") ||
+      req.headers.get("x-idempotency-key") ||
+      data.idempotencyKey ||
+      null;
+
+    // Idempotency Check: Return existing record if already submitted
+    // ponytail: JSON-indexed audit event idempotency lookup within a 10-minute sliding window; upgrade path: dedicated Redis / DB idempotency table if distributed multi-region rate-limiting is needed.
+    if (idempotencyKey) {
+      const existingEvent = await db.incidentEvent.findFirst({
+        where: {
+          createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) },
+          diff: {
+            path: ["idempotencyKey"],
+            equals: idempotencyKey,
+          },
+        },
+        include: {
+          incident: {
+            include: {
+              site: { select: { id: true, name: true, code: true } },
+              asset: { select: { id: true, assetTag: true, name: true, assetType: true } },
+              reportedBy: { select: { id: true, name: true, role: true } },
+              assignedTo: { select: { id: true, name: true, role: true } },
+            },
+          },
+        },
+      });
+
+      if (existingEvent?.incident) {
+        return apiSuccess(existingEvent.incident, { isIdempotentReplay: true }, 200);
+      }
+    }
+
+    if (data.audioRecordingId) {
+      const existingAudioIncident = await db.incident.findUnique({
+        where: { audioRecordingId: data.audioRecordingId },
+        include: {
+          site: { select: { id: true, name: true, code: true } },
+          asset: { select: { id: true, assetTag: true, name: true, assetType: true } },
+          reportedBy: { select: { id: true, name: true, role: true } },
+          assignedTo: { select: { id: true, name: true, role: true } },
+        },
+      });
+      if (existingAudioIncident) {
+        return apiSuccess(existingAudioIncident, { isIdempotentReplay: true }, 200);
+      }
+    }
+
     // Determine requested status (defaults to SUBMITTED for direct user creation)
     const targetStatus: IncidentStatus = data.status || IncidentStatus.SUBMITTED;
+
+    // Require explicit confirmation for active incident submissions originating from AI/voice extraction,
+    // or when userConfirmed is explicitly set to false
+    const requiresConfirmation =
+      Boolean(data.isAiExtracted || data.audioRecordingId) || data.userConfirmed === false;
+
+    if (
+      requiresConfirmation &&
+      targetStatus !== IncidentStatus.DRAFT &&
+      targetStatus !== IncidentStatus.NEEDS_CLARIFICATION &&
+      data.userConfirmed !== true
+    ) {
+      throw new ValidationError(
+        "Explicit user confirmation is required before submitting an active incident."
+      );
+    }
 
     // Enforce critical constraint: No AI extraction can create a confirmed incident without user approval
     assertAiExtractionApproval({
@@ -310,15 +379,38 @@ export async function POST(req: NextRequest) {
               eventType: isConfirmed ? "CONFIRMATION" : "STATUS_CHANGE",
               fromStatus: isConfirmed ? IncidentStatus.DRAFT : null,
               toStatus: targetStatus,
-              title: isConfirmed ? "Incident Ticket Confirmed & Submitted" : "Draft Incident Created",
+              title: isConfirmed ? "Technician Confirmed & Submitted Incident" : "Draft Incident Created",
               description: isConfirmed
-                ? `Incident logged by ${session.name} (${session.role}).`
+                ? `Incident reviewed, validated, and explicitly confirmed on-site by ${session.name} (${session.role}).`
                 : "Initial draft generated and stored awaiting technician review.",
               diff: {
                 title: data.title,
                 priority: data.priority,
                 faultCategory: data.faultCategory,
                 status: targetStatus,
+                actionsAlreadyTaken: data.actionsAlreadyTaken || null,
+                validatedExtraction: data.validatedExtraction || {
+                  assetId: data.assetId,
+                  assetTag: matchedAsset?.assetTag || null,
+                  equipmentType: matchedAsset?.assetType || null,
+                  reportedAlarm: data.errorCode || null,
+                  symptoms: data.symptoms || null,
+                  actionsAlreadyTaken: data.actionsAlreadyTaken || null,
+                  suggestedPriority: data.priority,
+                  faultCategory: data.faultCategory,
+                  isValid: validationReport.isValid,
+                },
+                confirmation: isConfirmed
+                  ? {
+                      confirmedByUserId: session.userId,
+                      confirmedByName: session.name,
+                      confirmedByRole: session.role,
+                      confirmedAt: new Date().toISOString(),
+                      confirmationNotes: data.confirmationNotes || null,
+                      explicitConfirmation: true,
+                    }
+                  : null,
+                idempotencyKey: idempotencyKey || null,
               },
             },
           },

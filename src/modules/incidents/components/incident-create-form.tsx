@@ -24,6 +24,14 @@ import {
   Radio,
   Send,
   MessageSquare,
+  ShieldCheck,
+  Copy,
+  Check,
+  ExternalLink,
+  ArrowLeft,
+  ArrowRight,
+  ClipboardCheck,
+  Edit3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AudioRecorder, RecordedAudioData } from "@/modules/speech";
@@ -81,12 +89,24 @@ export function IncidentCreateForm({
   const [title, setTitle] = useState<string>("");
   const [description, setDescription] = useState<string>(initialTranscript || "");
   const [symptoms, setSymptoms] = useState<string>("");
+  const [actionsAlreadyTaken, setActionsAlreadyTaken] = useState<string>("");
   const [errorCode, setErrorCode] = useState<string>("");
   const [faultCategory, setFaultCategory] = useState<FaultCategory>("OTHER");
   const [priority, setPriority] = useState<IncidentPriority>("MEDIUM");
   const [assignedToUserId, setAssignedToUserId] = useState<string>("");
   const [audioRecordingId, setAudioRecordingId] = useState<string | null>(initialAudioRecordingId || null);
   const [originalTranscript, setOriginalTranscript] = useState<string>(initialTranscript || "");
+
+  // Workflow Review & Confirmation State
+  const [workflowStage, setWorkflowStage] = useState<"EDIT" | "REVIEW" | "CONFIRMED">("EDIT");
+  const [explicitConfirmationChecked, setExplicitConfirmationChecked] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+  const [confirmedIncident, setConfirmedIncident] = useState<any | null>(null);
+  const [clientSubmissionId] = useState<string>(() =>
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `idem-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+  );
 
   // Embedded Voice Recorder & Extraction state
   const [showVoiceRecorder, setShowVoiceRecorder] = useState<boolean>(false);
@@ -199,6 +219,12 @@ export function IncidentCreateForm({
         }
         if (ex.symptoms && ex.symptoms.length > 0 && !symptoms) {
           setSymptoms(ex.symptoms.join(", "));
+        }
+        if (ex.actionsAlreadyTaken && !actionsAlreadyTaken) {
+          setActionsAlreadyTaken(ex.actionsAlreadyTaken);
+        }
+        if (ex.originalTranscript && !originalTranscript) {
+          setOriginalTranscript(ex.originalTranscript);
         }
         if (ex.faultCategory && ex.faultCategory !== "OTHER") {
           setFaultCategory(ex.faultCategory);
@@ -324,7 +350,10 @@ export function IncidentCreateForm({
     setSuggestionConfidence(result.confidence);
   }, [faultCategory, selectedAsset, title, symptoms, errorCode]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  const selectedSite = sites.find((s) => s.id === siteId);
+  const priorityMeta = INCIDENT_PRIORITY_META[priority] || INCIDENT_PRIORITY_META.MEDIUM;
+
+  function handleProceedToReview(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
 
@@ -341,6 +370,18 @@ export function IncidentCreateForm({
       return;
     }
 
+    setWorkflowStage("REVIEW");
+    setExplicitConfirmationChecked(false);
+  }
+
+  async function handleConfirmAndSubmit() {
+    setFormError(null);
+
+    if (!explicitConfirmationChecked) {
+      setFormError("Explicit confirmation checkbox is required before submission.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -350,6 +391,7 @@ export function IncidentCreateForm({
         title: title.trim(),
         description: description.trim(),
         symptoms: symptoms.trim() || null,
+        actionsAlreadyTaken: actionsAlreadyTaken.trim() || null,
         errorCode: errorCode.trim() || null,
         faultCategory,
         priority,
@@ -361,12 +403,18 @@ export function IncidentCreateForm({
           originalTranscript.trim() ||
           initialTranscript ||
           (extractedData?.originalTranscript ?? null),
+        isAiExtracted: Boolean(extractedData || audioRecordingId),
         userConfirmed: true, // Explicit user confirmation
+        idempotencyKey: clientSubmissionId,
+        validatedExtraction: extractedData || null,
       };
 
       const res = await fetch("/api/v1/incidents", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": clientSubmissionId,
+        },
         body: JSON.stringify(payload),
       });
 
@@ -375,16 +423,420 @@ export function IncidentCreateForm({
         throw new Error(data.error?.message || "Failed to create incident");
       }
 
-      router.push(`/incidents/${data.data.id}`);
+      setConfirmedIncident(data.data);
+      setWorkflowStage("CONFIRMED");
       router.refresh();
     } catch (err: unknown) {
       setFormError(err instanceof Error ? err.message : "Failed to create incident");
+    } finally {
       setSubmitting(false);
     }
   }
 
+  // ===========================================================================
+  // STAGE 3: INCIDENT CONFIRMATION RECEIPT & DISPLAY INCIDENT ID
+  // ===========================================================================
+  if (workflowStage === "CONFIRMED" && confirmedIncident) {
+    return (
+      <div className="rounded-lg border border-emerald-300 bg-white p-6 space-y-6 shadow-xs">
+        <div className="flex flex-col sm:flex-row items-center gap-4 pb-4 border-b border-neutral-200">
+          <div className="h-12 w-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="h-7 w-7" />
+          </div>
+          <div className="space-y-1 text-center sm:text-left">
+            <h3 className="text-base font-bold text-neutral-900 font-mono">
+              Incident Ticket Confirmed &amp; Logged
+            </h3>
+            <p className="text-xs text-neutral-600">
+              The incident has been verified on-site and submitted to the supervisor dispatch queue.
+            </p>
+          </div>
+        </div>
+
+        {/* Ticket Number & UUID Display */}
+        <div className="p-4 rounded-lg bg-neutral-50 border border-neutral-200 space-y-3 font-mono">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-neutral-200">
+            <span className="text-xs text-neutral-500 uppercase font-semibold">Ticket Number</span>
+            <span className="text-lg font-bold text-neutral-900">{confirmedIncident.ticketNumber}</span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="text-xs text-neutral-500 uppercase font-semibold">Incident ID (UUID)</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-neutral-700 bg-white px-2 py-1 rounded border border-neutral-200 select-all font-mono">
+                {confirmedIncident.id}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(confirmedIncident.id);
+                  setCopiedId(true);
+                  setTimeout(() => setCopiedId(false), 2000);
+                }}
+                className="p-1 rounded text-neutral-500 hover:text-neutral-800 hover:bg-neutral-200 cursor-pointer"
+                title="Copy Incident ID to clipboard"
+              >
+                {copiedId ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-neutral-200 text-xs">
+            <span className="text-neutral-500 uppercase font-semibold">Initial Ticket Status</span>
+            <span className="bg-amber-50 text-amber-800 px-2.5 py-0.5 rounded-full border border-amber-300 font-bold">
+              {confirmedIncident.status}
+            </span>
+          </div>
+
+          {confirmedIncident.confirmedAt && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-neutral-500">
+              <span className="uppercase">Confirmed At</span>
+              <span>
+                {new Date(confirmedIncident.confirmedAt).toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900 flex items-center gap-2">
+          <Radio className="h-4 w-4 text-blue-600 animate-pulse shrink-0" />
+          <span>
+            Supervisor Dashboard Updated: Ticket is visible on the site triage board for immediate review and assignment.
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setWorkflowStage("EDIT");
+              setTitle("");
+              setDescription("");
+              setSymptoms("");
+              setActionsAlreadyTaken("");
+              setErrorCode("");
+              setExtractedData(null);
+              setConfirmedIncident(null);
+            }}
+            className="px-4 py-2 rounded border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-semibold transition-colors cursor-pointer"
+          >
+            Log Another Incident
+          </button>
+
+          <Link
+            href="/dashboard"
+            className="px-4 py-2 rounded border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-semibold transition-colors"
+          >
+            Go to Dashboard
+          </Link>
+
+          <Link
+            href={`/incidents/${confirmedIncident.id}`}
+            className="inline-flex items-center gap-1.5 px-5 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-xs transition-colors"
+          >
+            <span>View Incident Details</span>
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ===========================================================================
+  // STAGE 2: FINAL TECHNICIAN REVIEW & EXPLICIT CONFIRMATION
+  // ===========================================================================
+  if (workflowStage === "REVIEW") {
+    return (
+      <div className="space-y-6">
+        {formError && (
+          <div className="rounded-md border border-rose-200 bg-rose-50 p-3 flex items-start gap-2.5 text-xs text-rose-800">
+            <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-bold">Error submitting incident</span>
+              <p>{formError}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Header Card */}
+        <div className="rounded-lg border border-blue-200 bg-blue-50/70 p-4 space-y-2 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-blue-600" />
+              <h3 className="text-sm font-bold font-mono uppercase tracking-wider text-blue-950">
+                Technician Final Review &amp; Confirmation
+              </h3>
+            </div>
+            <span className="text-[10px] font-mono bg-blue-200 text-blue-900 px-2 py-0.5 rounded font-bold uppercase">
+              Step 2 of 2: Explicit Confirmation Required
+            </span>
+          </div>
+          <p className="text-xs text-blue-800 leading-relaxed">
+            Verify all 10 operational parameters below before submitting this ticket to the supervisor dispatch queue.
+          </p>
+        </div>
+
+        {/* 10 Verified Parameters Card */}
+        <div className="rounded-lg border border-neutral-200 bg-white p-5 space-y-4 shadow-2xs">
+          <div className="flex items-center justify-between pb-3 border-b border-neutral-200">
+            <h4 className="text-xs font-bold font-mono uppercase tracking-wider text-neutral-800">
+              Verified Operational Parameters (10 Items)
+            </h4>
+            <button
+              type="button"
+              onClick={() => setWorkflowStage("EDIT")}
+              className="inline-flex items-center gap-1 text-xs font-mono text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+              <span>Edit Fields</span>
+            </button>
+          </div>
+
+          <div className="space-y-3.5 text-xs">
+            {/* 1. Selected Site */}
+            <div className="p-3 rounded-md bg-neutral-50 border border-neutral-200 flex items-start justify-between gap-3">
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-mono uppercase text-neutral-400 block">1. Selected Site</span>
+                <span className="font-bold text-neutral-900">{selectedSite?.name || siteId}</span>
+                <span className="text-[11px] font-mono text-neutral-500 block">Code: {selectedSite?.code}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWorkflowStage("EDIT")}
+                className="text-[11px] font-mono text-blue-600 hover:underline cursor-pointer"
+              >
+                Change
+              </button>
+            </div>
+
+            {/* 2. Selected Asset */}
+            <div className="p-3 rounded-md bg-neutral-50 border border-neutral-200 flex items-start justify-between gap-3">
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-mono uppercase text-neutral-400 block">2. Selected Equipment / Asset</span>
+                {selectedAsset ? (
+                  <div>
+                    <span className="font-bold text-neutral-900 font-mono text-sm">{selectedAsset.assetTag}</span>
+                    <span className="text-neutral-700 block text-[11px]">{selectedAsset.name} ({selectedAsset.assetType})</span>
+                  </div>
+                ) : (
+                  <span className="text-amber-800 font-medium italic">No specific asset selected (General Site Fault)</span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setWorkflowStage("EDIT")}
+                className="text-[11px] font-mono text-blue-600 hover:underline cursor-pointer"
+              >
+                Change
+              </button>
+            </div>
+
+            {/* 3. Original Transcript */}
+            <div className="p-3 rounded-md bg-neutral-50 border border-neutral-200 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase text-neutral-400">3. Original Transcript (Verbatim Speech Snapshot)</span>
+                {audioRecordingId && (
+                  <span className="text-[9px] font-mono bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded border border-emerald-200 font-semibold">
+                    Audio Attached
+                  </span>
+                )}
+              </div>
+              {originalTranscript ? (
+                <p className="font-mono text-[11px] text-neutral-800 bg-white p-2.5 rounded border border-neutral-200 italic leading-relaxed">
+                  &ldquo;{originalTranscript}&rdquo;
+                </p>
+              ) : (
+                <span className="text-neutral-500 italic block text-[11px]">No original voice transcript captured (Manual entry)</span>
+              )}
+            </div>
+
+            {/* 4. Fault Description */}
+            <div className="p-3 rounded-md bg-neutral-50 border border-neutral-200 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase text-neutral-400">4. Fault Description &amp; Title</span>
+                <button
+                  type="button"
+                  onClick={() => setWorkflowStage("EDIT")}
+                  className="text-[11px] font-mono text-blue-600 hover:underline cursor-pointer"
+                >
+                  Edit
+                </button>
+              </div>
+              <span className="font-bold text-neutral-900 block text-xs">{title}</span>
+              <p className="text-[11px] text-neutral-800 leading-relaxed">{description}</p>
+            </div>
+
+            {/* 5. Reported Alarm & 6. Symptoms */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3 rounded-md bg-neutral-50 border border-neutral-200 space-y-1">
+                <span className="text-[10px] font-mono uppercase text-neutral-400 block">5. Reported Alarm / OEM Error Code</span>
+                {errorCode ? (
+                  <span className="font-mono font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 inline-block">
+                    {errorCode}
+                  </span>
+                ) : (
+                  <span className="text-neutral-500 italic text-[11px]">None reported</span>
+                )}
+              </div>
+
+              <div className="p-3 rounded-md bg-neutral-50 border border-neutral-200 space-y-1">
+                <span className="text-[10px] font-mono uppercase text-neutral-400 block">6. Symptoms Observed</span>
+                {symptoms ? (
+                  <span className="font-medium text-neutral-900 block text-[11px]">{symptoms}</span>
+                ) : (
+                  <span className="text-neutral-500 italic text-[11px]">None documented</span>
+                )}
+              </div>
+            </div>
+
+            {/* 7. Actions Already Taken */}
+            <div className="p-3 rounded-md bg-neutral-50 border border-neutral-200 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono uppercase text-neutral-400">7. Actions Already Taken (Pre-reporting Mitigation)</span>
+                <button
+                  type="button"
+                  onClick={() => setWorkflowStage("EDIT")}
+                  className="text-[11px] font-mono text-blue-600 hover:underline cursor-pointer"
+                >
+                  Edit
+                </button>
+              </div>
+              {actionsAlreadyTaken ? (
+                <span className="font-medium text-emerald-900 bg-emerald-50 px-2 py-1 rounded border border-emerald-200 block text-[11px]">
+                  {actionsAlreadyTaken}
+                </span>
+              ) : (
+                <span className="text-neutral-500 italic text-[11px] block">No immediate actions reported</span>
+              )}
+            </div>
+
+            {/* 8. Suggested Priority & Fault Category */}
+            <div className="p-3 rounded-md bg-neutral-50 border border-neutral-200 space-y-1.5">
+              <span className="text-[10px] font-mono uppercase text-neutral-400 block">8. Suggested Priority &amp; Category</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={cn("text-xs font-mono font-bold px-2 py-0.5 rounded-full border", priorityMeta.badge)}>
+                  Priority: {priority}
+                </span>
+                <span className="text-xs font-mono bg-white text-neutral-800 px-2 py-0.5 rounded border border-neutral-200">
+                  Category: {FAULT_CATEGORY_LABELS[faultCategory] || faultCategory}
+                </span>
+              </div>
+              {suggestionReasoning.length > 0 && (
+                <p className="text-[10px] font-mono text-neutral-600 pt-1">
+                  AI Rationale: {suggestionReasoning.join(" • ")}
+                </p>
+              )}
+            </div>
+
+            {/* 9. Missing Information */}
+            <div className="p-3 rounded-md bg-neutral-50 border border-neutral-200 space-y-1">
+              <span className="text-[10px] font-mono uppercase text-neutral-400 block">9. Missing Information Status</span>
+              {extractedData?.missingInformation && extractedData.missingInformation.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {extractedData.missingInformation.map((m: string, idx: number) => (
+                    <span key={idx} className="bg-purple-50 text-purple-800 text-[10px] font-mono px-2 py-0.5 rounded border border-purple-200">
+                      Pending: {m}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-emerald-700 font-semibold flex items-center gap-1 text-[11px]">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  All required operational parameters verified
+                </span>
+              )}
+            </div>
+
+            {/* 10. Historical Context */}
+            <div className="p-3 rounded-md bg-neutral-50 border border-neutral-200 space-y-2">
+              <span className="text-[10px] font-mono uppercase text-neutral-400 block">10. Historical Context</span>
+              {historicalReport ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono">
+                    <span className="bg-white px-2 py-0.5 rounded border border-neutral-200 text-indigo-700 font-bold">
+                      {historicalReport.sameAssetCount} prior tickets on asset
+                    </span>
+                    <span className="bg-white px-2 py-0.5 rounded border border-neutral-200 text-purple-700 font-bold">
+                      {historicalReport.similarSymptomsCount} with similar symptoms
+                    </span>
+                    <span className={cn("px-2 py-0.5 rounded border font-bold", historicalReport.unresolvedCount > 0 ? "bg-rose-50 text-rose-800 border-rose-300" : "bg-white text-emerald-700 border-neutral-200")}>
+                      {historicalReport.unresolvedCount} unresolved open tickets
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-amber-800 bg-amber-50 p-2 rounded border border-amber-200 italic leading-relaxed">
+                    {historicalReport.rootCauseDisclaimer}
+                  </p>
+                </div>
+              ) : (
+                <span className="text-neutral-500 italic text-[11px] block">No historical matching records found for this equipment.</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Explicit Confirmation Checkbox */}
+        <div className="rounded-lg border-2 border-blue-400 bg-blue-50/90 p-4 space-y-2 shadow-2xs">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={explicitConfirmationChecked}
+              onChange={(e) => setExplicitConfirmationChecked(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-blue-400 text-blue-600 focus:ring-blue-500 cursor-pointer"
+            />
+            <div className="space-y-0.5 text-xs text-blue-950">
+              <span className="font-bold text-sm block">Explicit Technician On-Site Confirmation *</span>
+              <p className="text-blue-900 leading-relaxed text-[11px]">
+                I confirm that I have physically inspected this equipment on-site, verified the reported telemetry and symptoms above, and explicitly authorize this incident to be created in the supervisor dispatch queue.
+              </p>
+            </div>
+          </label>
+        </div>
+
+        {/* Review Controls */}
+        <div className="flex items-center justify-between gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => setWorkflowStage("EDIT")}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-semibold transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span>Back to Edit Fields</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={submitting || !explicitConfirmationChecked}
+            onClick={handleConfirmAndSubmit}
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Submitting Confirmed Incident...</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Confirm &amp; Submit Incident</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ===========================================================================
+  // STAGE 1: FIELD CAPTURE & INLINE EDITING
+  // ===========================================================================
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleProceedToReview} className="space-y-6">
       {formError && (
         <div className="rounded-md border border-rose-200 bg-rose-50 p-3 flex items-start gap-2.5 text-xs text-rose-800">
           <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
@@ -822,6 +1274,19 @@ export function IncidentCreateForm({
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-neutral-700">
+              Actions Already Taken (Optional Pre-reporting Mitigation)
+            </label>
+            <input
+              type="text"
+              value={actionsAlreadyTaken}
+              onChange={(e) => setActionsAlreadyTaken(e.target.value)}
+              placeholder="e.g. Breaker reset attempted, isolated DC switchgear, cooling filter cleared"
+              className="w-full px-3 py-2 text-xs rounded border border-neutral-200 bg-neutral-50 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-blue-600"
+            />
+          </div>
+
           {/* Supervisor Assignment at Creation */}
           {isSupervisorOrAdmin && (
             <div className="space-y-1.5 pt-2 border-t border-neutral-100">
@@ -860,20 +1325,10 @@ export function IncidentCreateForm({
         </Link>
         <button
           type="submit"
-          disabled={submitting}
-          className="inline-flex items-center gap-2 px-5 py-2 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-2xs transition-colors cursor-pointer"
         >
-          {submitting ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span>Submitting Incident...</span>
-            </>
-          ) : (
-            <>
-              <Save className="h-3.5 w-3.5" />
-              <span>Confirm & Submit Incident</span>
-            </>
-          )}
+          <span>Review for Confirmation (10 Fields Verified)</span>
+          <ArrowRight className="h-3.5 w-3.5" />
         </button>
       </div>
     </form>
