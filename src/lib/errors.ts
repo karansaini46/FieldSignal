@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
 import { ApiErrorResponse } from "@/types/api";
+import { logger } from "@/lib/logger";
 
 export type ErrorCode =
   | "BAD_REQUEST"
@@ -156,7 +157,7 @@ export function handleApiError(error: unknown): NextResponse<ApiErrorResponse> {
   }
 
   // 4. Unexpected / Unhandled Server Errors
-  console.error(`[Unhandled Error] [ReqID: ${requestId}]:`, error);
+  logger.error("Unhandled API exception", error, { requestId });
 
   return NextResponse.json(
     {

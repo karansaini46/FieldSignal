@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireAuth, assertSiteAccess } from "@/lib/auth-guard";
 import { hasPermission } from "@/modules/auth/permissions";
 import { handleApiError, NotFoundError, ForbiddenError, ValidationError } from "@/lib/errors";
-import { apiSuccess, apiPaginated, apiCreated } from "@/lib/api-response";
+import { apiPaginated, apiCreated } from "@/lib/api-response";
 import { AssetType, AssetStatus, Prisma } from "@prisma/client";
 import {
   assetInputSchema,

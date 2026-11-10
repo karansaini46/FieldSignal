@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { requireAuth, assertSiteAccess } from "@/lib/auth-guard";
-import { handleApiError, NotFoundError, BadRequestError } from "@/lib/errors";
+import { handleApiError, NotFoundError } from "@/lib/errors";
 import { apiSuccess } from "@/lib/api-response";
 import { db } from "@/lib/db";
 import {

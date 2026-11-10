@@ -14,22 +14,17 @@ import {
 } from "@/modules/incidents";
 import { IncidentStatusActions } from "@/modules/incidents/components/incident-status-actions";
 import { IncidentTimeline } from "@/modules/incidents/components/incident-timeline";
-import { IncidentClarificationCard } from "@/modules/incidents/components/incident-clarification-card";
+import { IncidentClarificationCard, ClarificationRecord } from "@/modules/incidents/components/incident-clarification-card";
 import { HistoricalIntelligenceCard } from "@/modules/incidents/components/historical-intelligence-card";
 import {
   ChevronLeft,
   MapPin,
   Cpu,
-  Clock,
   User,
   AlertTriangle,
-  CheckCircle2,
   FileText,
   Activity,
-  Layers,
   ArrowRight,
-  Sparkles,
-  ShieldCheck,
   Radio,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -407,7 +402,7 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
         {(incident.status === "NEEDS_CLARIFICATION" || incident.clarifications.length > 0) && (
           <IncidentClarificationCard
             incidentId={incident.id}
-            clarifications={incident.clarifications as any}
+            clarifications={incident.clarifications as ClarificationRecord[]}
             isEditable={incident.status !== "CLOSED"}
           />
         )}

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/auth-guard";
-import { handleApiError, ValidationError } from "@/lib/errors";
+import { handleApiError } from "@/lib/errors";
 import { getGnaniTtsService } from "@/modules/speech";
 
 const synthesizeSchema = z.object({

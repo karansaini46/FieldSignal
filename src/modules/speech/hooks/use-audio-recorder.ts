@@ -423,7 +423,7 @@ export function useAudioRecorder(
     setError(null);
     setStatus("idle");
     setIsPlaying(false);
-  }, [cleanupMedia, recordedData?.url]);
+  }, [cleanupMedia, recordedData]);
 
   // Reset to re-record
   const resetRecording = useCallback(() => {
@@ -471,7 +471,7 @@ export function useAudioRecorder(
           setIsPlaying(false);
         });
     }
-  }, [isPlaying, recordedData?.url]);
+  }, [isPlaying, recordedData]);
 
   const seekPlayback = useCallback((timeSeconds: number) => {
     if (audioElementRef.current) {

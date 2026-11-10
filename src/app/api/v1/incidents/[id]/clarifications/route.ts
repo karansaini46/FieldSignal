@@ -82,7 +82,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       });
 
       // 3b. Update incident properties based on the answered field
-      const incidentUpdates: Record<string, any> = {};
+      const incidentUpdates: Record<string, unknown> = {};
 
       if (clarification.missingField === "asset" || clarification.missingField === "assetId") {
         if (!incident.assetId) {

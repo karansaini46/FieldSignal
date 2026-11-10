@@ -1,15 +1,14 @@
 import { NextRequest } from "next/server";
-import path from "path";
-import fs from "fs/promises";
 import crypto from "crypto";
 import { requireAuth } from "@/lib/auth-guard";
 import { BadRequestError, handleApiError } from "@/lib/errors";
 import { apiSuccess } from "@/lib/api-response";
 import { getGnaniSpeechService } from "@/modules/speech";
-import { validateAudioPayload, getAudioFileExtension } from "@/modules/speech/audio-validator";
+import { validateAudioPayload } from "@/modules/speech/audio-validator";
 import { transcodeToWav } from "@/modules/speech/audio-transcoder";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { saveAudioFile } from "@/lib/audio-storage";
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,9 +45,10 @@ export async function POST(request: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
+    const metadataObj = recentDuplicate?.metadata as Record<string, unknown> | null;
     if (
       recentDuplicate &&
-      (recentDuplicate.metadata as any)?.audioHash === audioHash
+      metadataObj?.audioHash === audioHash
     ) {
       return apiSuccess({
         recordingId: recentDuplicate.id,
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         confidence: recentDuplicate.confidence || 0,
         processingTimeSeconds: recentDuplicate.durationSeconds,
         latencyMs: recentDuplicate.processingLatencyMs || 0,
-        model: (recentDuplicate.metadata as any)?.model || env.GNANI_AI_MODEL,
+        model: (metadataObj?.model as string) || env.GNANI_AI_MODEL,
         fileSizeBytes: recentDuplicate.fileSizeBytes,
         mimeType: recentDuplicate.mimeType,
         isDuplicate: true,
@@ -83,15 +83,9 @@ export async function POST(request: NextRequest) {
     const { buffer: readyBuffer, mimeType: readyMime, fileName: readyFileName } =
       await transcodeToWav(buffer, mimeType);
 
-    // 7. Store audio file safely on disk
-    const storageDir = path.resolve(/*turbopackIgnore: true*/ process.cwd(), env.AUDIO_STORAGE_DIR);
-    await fs.mkdir(storageDir, { recursive: true });
-
-    const ext = getAudioFileExtension(readyMime);
+    // 7. Store audio file safely (auto-detects serverless /tmp environment)
     const recordingId = crypto.randomUUID();
-    const diskFileName = `${recordingId}.${ext}`;
-    const filePath = path.join(/*turbopackIgnore: true*/ storageDir, diskFileName);
-    await fs.writeFile(filePath, readyBuffer);
+    const { relativePath } = await saveAudioFile(readyBuffer, readyMime, recordingId);
 
     // 8. Transcribe via server-side GnaniSpeechService
     const speechService = getGnaniSpeechService();
@@ -108,7 +102,7 @@ export async function POST(request: NextRequest) {
         id: recordingId,
         userId: session.userId,
         siteId,
-        filePath: path.relative(process.cwd(), filePath),
+        filePath: relativePath,
         mimeType: readyMime,
         fileSizeBytes: readyBuffer.byteLength,
         durationSeconds: transcription.processingTimeSeconds || 0,
