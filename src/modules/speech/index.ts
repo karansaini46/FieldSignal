@@ -19,5 +19,6 @@ export {
   GnaniTimbreTtsService,
   getGnaniTtsService,
   DEFAULT_GNANI_TTS_CONFIG,
+  wrapPcmInWav,
 } from "./gnani-tts-service";
 

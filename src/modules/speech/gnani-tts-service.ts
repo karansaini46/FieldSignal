@@ -37,7 +37,7 @@ export const DEFAULT_GNANI_TTS_CONFIG: GnaniTtsConfig = {
 };
 
 // ponytail: Native 16-bit PCM WAV synthesizer for dev/offline fallback; upgrade path: upstream cloud cache / CDN bucket for high-traffic pre-rendered audio.
-function wrapPcmInWav(pcmBuffer: Buffer, sampleRate = 16000, numChannels = 1, bitsPerSample = 16): Buffer {
+export function wrapPcmInWav(pcmBuffer: Buffer, sampleRate = 16000, numChannels = 1, bitsPerSample = 16): Buffer {
   if (pcmBuffer.length >= 4 && pcmBuffer.subarray(0, 4).toString("ascii") === "RIFF") {
     return pcmBuffer; // Already has standard WAV header
   }

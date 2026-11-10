@@ -173,27 +173,26 @@ export function TechnicianDashboard({
           </p>
         </div>
 
-        {/* Ambient Site Telemetry Strip (Identified Demo SCADA Feed) */}
+        {/* Real Field Operational Status Strip */}
         <div className="flex items-center gap-2 text-xs font-mono bg-white border border-neutral-200 rounded-md p-2 shadow-2xs">
           <div className="px-2 border-r border-neutral-200">
-            <div className="text-[10px] text-neutral-400 uppercase font-sans">Irradiance</div>
+            <div className="text-[10px] text-neutral-400 uppercase font-sans">Active Work Orders</div>
             <div className="font-bold text-neutral-800 flex items-center gap-1">
-              <Sun className="h-3 w-3 text-amber-500" />
-              915 W/m²
+              <Layers className="h-3 w-3 text-neutral-500" />
+              {assignedIncidents.length} Assigned
             </div>
           </div>
           <div className="px-2 border-r border-neutral-200">
-            <div className="text-[10px] text-neutral-400 uppercase font-sans">Ambient Temp</div>
-            <div className="font-bold text-neutral-800 flex items-center gap-1">
-              <Thermometer className="h-3 w-3 text-rose-500" />
-              42.8 °C
+            <div className="text-[10px] text-neutral-400 uppercase font-sans">Site Code</div>
+            <div className="font-bold text-neutral-800 flex items-center gap-1 font-mono">
+              {siteCode}
             </div>
           </div>
           <div className="px-2">
-            <div className="text-[10px] text-neutral-400 uppercase font-sans">SCADA Link</div>
+            <div className="text-[10px] text-neutral-400 uppercase font-sans">Shift Status</div>
             <div className="text-emerald-700 font-semibold flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Active
+              On Duty
             </div>
           </div>
         </div>

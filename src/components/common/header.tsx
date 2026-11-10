@@ -153,6 +153,7 @@ export async function Header() {
             </div>
           ) : (
             <Link
+              id="header-sign-in-link"
               href="/login"
               className={buttonVariants({
                 variant: "default",

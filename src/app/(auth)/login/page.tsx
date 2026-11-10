@@ -63,7 +63,7 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           identifier: targetIdentifier,
-          password: "password123",
+          password: customPhone ? "password123" : password,
         }),
       });
 
@@ -72,13 +72,12 @@ export default function LoginPage() {
         throw new Error(data.error?.message || "Failed to sign in");
       }
 
-      // Route based on role
+      // Route based on role with full document navigation to guarantee session cookie attachment
       if (data.data.user.role === "TECHNICIAN") {
-        router.push("/field");
+        window.location.href = "/field";
       } else {
-        router.push("/dashboard");
+        window.location.href = "/dashboard";
       }
-      router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -116,7 +115,12 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
+            <div
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleLogin();
+              }}
+              className="space-y-4"
+            >
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
                   <Phone className="h-3.5 w-3.5 text-muted-foreground" />
@@ -146,11 +150,17 @@ export default function LoginPage() {
                 />
               </div>
 
-              <Button type="submit" disabled={loading} className="w-full gap-2">
+              <Button
+                id="sign-in-submit-btn"
+                type="button"
+                onClick={() => handleLogin()}
+                disabled={loading}
+                className="w-full gap-2"
+              >
                 <ShieldCheck className="h-4 w-4" />
                 <span>{loading ? "Authenticating..." : "Sign In"}</span>
               </Button>
-            </form>
+            </div>
           </CardContent>
         </Card>
 
