@@ -27,6 +27,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AudioRecorder, RecordedAudioData } from "@/modules/speech";
+import { HistoricalIntelligenceCard } from "./historical-intelligence-card";
+import { HistoricalIntelligenceReport } from "../historical-intelligence";
 
 interface SiteOption {
   id: string;
@@ -106,6 +108,9 @@ export function IncidentCreateForm({
   const [isAnsweringClarification, setIsAnsweringClarification] = useState(false);
   const [clarificationHistory, setClarificationHistory] = useState<any[]>([]);
   const [showClarificationVoice, setShowClarificationVoice] = useState(false);
+
+  // Historical intelligence state during incident review
+  const [historicalReport, setHistoricalReport] = useState<HistoricalIntelligenceReport | null>(null);
 
   const filteredAssets = assets.filter((a) => a.siteId === siteId);
   const selectedAsset = assets.find((a) => a.id === assetId);
@@ -221,6 +226,44 @@ export function IncidentCreateForm({
       runExtraction(initialTranscript);
     }
   }, []);
+
+  // Live Historical Incident Intelligence for review during draft creation
+  useEffect(() => {
+    if (!siteId || (!assetId && !extractedData?.assetCode)) {
+      setHistoricalReport(null);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchHistorical = async () => {
+      try {
+        const res = await fetch("/api/v1/incidents/historical-intelligence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            siteId,
+            assetId: assetId || undefined,
+            assetTag: extractedData?.assetCode || undefined,
+            symptoms: symptoms || undefined,
+            description: description || undefined,
+            errorCode: errorCode || undefined,
+          }),
+        });
+        const json = await res.json();
+        if (json.success && json.data && isMounted) {
+          setHistoricalReport(json.data);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch historical intelligence:", err);
+      }
+    };
+
+    const timer = setTimeout(fetchHistorical, 400);
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [siteId, assetId, extractedData?.assetCode, symptoms, errorCode, description]);
 
   async function handleVoiceNoteSubmit(data: RecordedAudioData) {
     if (isTranscribingVoice) return; // Prevent duplicate submissions
@@ -801,6 +844,11 @@ export function IncidentCreateForm({
           )}
         </div>
       </div>
+
+      {/* Historical Incident Intelligence Context during Review */}
+      {historicalReport && historicalReport.totalPreviousIncidents > 0 && (
+        <HistoricalIntelligenceCard report={historicalReport} isCompact={true} />
+      )}
 
       {/* Form Controls */}
       <div className="flex items-center justify-end gap-3 pt-2">

@@ -17,7 +17,8 @@
     "db:seed": "prisma db seed",
     "test:auth": "tsx scripts/test-auth-rbac.ts",
     "test:validation": "tsx scripts/test-asset-incident-validation.ts",
-    "test:clarification": "tsx scripts/test-clarification-workflow.ts"
+    "test:clarification": "tsx scripts/test-clarification-workflow.ts",
+    "test:historical": "tsx scripts/test-historical-intelligence.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

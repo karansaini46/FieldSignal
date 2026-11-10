@@ -10,10 +10,12 @@ import {
   INCIDENT_STATUS_META,
   INCIDENT_PRIORITY_META,
   FAULT_CATEGORY_LABELS,
-} from "@/modules/incidents/types";
+  getHistoricalIntelligenceService,
+} from "@/modules/incidents";
 import { IncidentStatusActions } from "@/modules/incidents/components/incident-status-actions";
 import { IncidentTimeline } from "@/modules/incidents/components/incident-timeline";
 import { IncidentClarificationCard } from "@/modules/incidents/components/incident-clarification-card";
+import { HistoricalIntelligenceCard } from "@/modules/incidents/components/historical-intelligence-card";
 import {
   ChevronLeft,
   MapPin,
@@ -117,6 +119,19 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
     INCIDENT_STATUS_META[incident.status] || INCIDENT_STATUS_META.SUBMITTED;
   const priorityMeta =
     INCIDENT_PRIORITY_META[incident.priority] || INCIDENT_PRIORITY_META.MEDIUM;
+
+  // Retrieve historical incident intelligence for incident review
+  const historicalService = getHistoricalIntelligenceService(db);
+  const historicalReport = await historicalService.analyzeHistoricalIntelligence({
+    siteId: incident.siteId,
+    currentIncidentId: incident.id,
+    assetId: incident.assetId,
+    assetTag: incident.asset?.assetTag || null,
+    symptoms: incident.symptoms,
+    description: incident.description,
+    title: incident.title,
+    errorCode: incident.errorCode,
+  });
 
   return (
     <AppShell
@@ -384,6 +399,9 @@ export default async function IncidentDetailPage({ params }: IncidentDetailPageP
             )}
           </div>
         </div>
+
+        {/* Feature: Historical Incident Intelligence */}
+        <HistoricalIntelligenceCard report={historicalReport} />
 
         {/* Feature: Clarification Workflow (One focused question at a time & history) */}
         {(incident.status === "NEEDS_CLARIFICATION" || incident.clarifications.length > 0) && (
